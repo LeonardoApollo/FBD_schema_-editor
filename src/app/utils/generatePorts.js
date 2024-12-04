@@ -7,6 +7,7 @@ const commonPortStyles = {
     fontColor: 'black',
     strokeColor: 'black',
     strokeWidth: 1,
+    editable: false,
     border: '1px solid black'
 }
 

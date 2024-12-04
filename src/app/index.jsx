@@ -154,16 +154,18 @@ export default function App () {
             if(ctrlKey && e.keyCode === 90) {
                 undoManager.undo();
                 handleGraphChange()
+                e.preventDefault();
             } 
             if(ctrlKey && e.keyCode === 89) {
                 undoManager.redo();
                 handleGraphChange()
+                e.preventDefault();
             }
-            e.preventDefault()
         }
 
+        const editorHadler = graph.getPlugin('CellEditorHandler')
         const handleDelete = (e) => {
-            if(e.key === 'Backspace') {
+            if(e.key === 'Backspace' && !editorHadler.editingCell) {
                 const cells = graph.getSelectionCells();
                 graph.removeCells(cells);
             }
@@ -176,7 +178,6 @@ export default function App () {
                 for (let i = 0; i < cells.length; i++) {
                     copiedCells.push(cells[i]); // Копируем ячейки в массив
                 }
-                console.log(copiedCells)
                 e.preventDefault(); // Отменяем стандартное поведение
             }
     
@@ -261,7 +262,7 @@ export default function App () {
                 const translate = graph.view.translate;
         
                 // Обновляем сдвиг графа
-                graph.view.setTranslate(translate.x - dx / scale, translate.y - dy / scale);
+                graph.view.setTranslate(translate.x - -dx / scale, translate.y - -dy / scale);
         
                 // Обновляем последнюю позицию мыши
                 lastMouseX = e.clientX;
@@ -371,19 +372,13 @@ export default function App () {
         }
 
         // SR 
-        addCellImage('/SR.svg', 100, 60, 'SR',  {editable: true});
+        addCellImage('/SR.svg', 100, 60, 'SR', {editable: true});
         // Start
-        addCellImage('/start.svg', 60, 20, 'start',{
-            editable: true
-        });
+        addCellImage('/start.svg', 60, 20, 'start', {editable: true});
         //End
-        addCellImage('/end.svg', 60, 20, 'end', {
-            editable: true
-        });
+        addCellImage('/end.svg', 60, 20, 'end', {editable: true});
         //AND
-        addCellImage('/AND.svg', 100, 40, 'AND',{
-            editable: true
-        });
+        addCellImage('/AND.svg', 100, 40, 'AND', {editable: true});
         // TP
         addCellImage('/TP.svg', 100, 40, 'TP',  {editable: true});
         graph.importCells
@@ -422,7 +417,7 @@ export default function App () {
             <div style={styles.main}>
                 <div style={styles.container} ref={graphRef} id='graph-container'/>
             </div>
-            {cellsState && <ConnectionPreview graph={cellsState}/>}
+            {cellsState && <ConnectionPreview cells={cellsState}/>}
         </div>
     )
 }
