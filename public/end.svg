@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<svg width="640" height="480" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" style="vector-effect: non-scaling-stroke;">
+ <!-- Created with SVG-edit - https://github.com/SVG-Edit/svgedit-->
+ <g class="layer">
+  <title>Layer 1</title>
+  <rect fill="#92c7fc" height="255.999989" id="svg_3" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" width="509.999979" x="65.499986" y="106.999982"/>
+  <line fill="none" id="svg_4" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" x1="64.5" x2="4.5" y1="228" y2="228"/>
+  <text fill="#000000" font-family="serif" font-size="24" id="svg_6" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" text-anchor="middle" transform="matrix(4.14181 0 0 5.0567 -676.254 -793.522)" x="240.053128" xml:space="preserve" y="210.395515">END</text>
+ </g>
+</svg>

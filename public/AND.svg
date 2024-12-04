@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<svg width="640" height="480" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" style="vector-effect: non-scaling-stroke;">
+ <!-- Created with SVG-edit - https://github.com/SVG-Edit/svgedit-->
+ <g class="layer">
+  <title>Layer 1</title>
+  <rect fill="#92c7fc" height="321.999986" id="svg_3" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" width="519.999967" x="60.499998" y="69.999985"/>
+  <line fill="none" id="svg_4" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" x1="60.5" x2="0.5" y1="318" y2="318"/>
+  <text fill="#000000" font-family="serif" font-size="24" id="svg_6" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" text-anchor="middle" transform="matrix(3.26239 0 0 3.55657 -460.283 -500.085)" x="239.328807" xml:space="preserve" y="210.395515">AND</text>
+  <line fill="none" id="svg_7" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" x1="0.5" x2="60.500002" y1="119" y2="119"/>
+  <line fill="none" id="svg_8" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" x1="638.5" x2="580.5" y1="115" y2="115"/>
+  <text fill="#000000" font-family="serif" font-size="24" id="svg_11" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" text-anchor="middle" transform="matrix(1.9378 0 0 1.61934 -93.7485 -46.7704)" x="100.5" xml:space="preserve" y="110">IN1</text>
+  <text fill="#000000" font-family="serif" font-size="24" id="svg_12" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" text-anchor="middle" transform="matrix(1.6697 0 0 1.47014 -163.638 -197.149)" x="155.5" xml:space="preserve" y="358">IN2</text>
+  <text fill="#000000" font-family="serif" font-size="24" id="svg_13" stroke="#000000" stroke-dasharray="null" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" text-anchor="middle" transform="matrix(1.68933 0 0 1.6542 -261.331 -58.1839)" x="470.5" xml:space="preserve" y="112">OUT</text>
+ </g>
+</svg>
