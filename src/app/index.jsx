@@ -114,7 +114,7 @@ export default function App () {
         graph.setConnectable(true);
         graph.setConnectableEdges(false);
 
-        // Включает подсказки при наведение на соединение
+        // Отключает подсказки при наведение на соединение
         graph.setTooltips(false);
 
         // Сама подсказка при наведение на соединение внешний вид настраивается стилем .mxTooltip
@@ -204,6 +204,9 @@ export default function App () {
                 e.preventDefault();
             }
         }
+
+        // Обновляет превью соединений при изменении лейблов ячеек
+        graph.addListener(InternalEvent.EDITING_STOPPED, handleGraphChange)
 
         // Подключение событий клавиш
         InternalEvent.addListener(document, 'keydown', handleKeyPress)

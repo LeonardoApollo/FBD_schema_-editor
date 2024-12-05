@@ -1,11 +1,9 @@
 export default function ConnectionPreview({cells}) {
     const edges = cells.filter(cell => cell.isEdge())
     let connections = [];
-    let keys = [];
     if(edges) {
         connections = edges.map(edge => {
             let sourceName, targetName, source, target;
-            keys.length = 0
             if(edge.source.geometry.x === 1) {
                 source = edge.source
                 target = edge.target
@@ -13,7 +11,6 @@ export default function ConnectionPreview({cells}) {
                 source = edge.target
                 target = edge.source
             }
-            keys.push(source.id + target.id)
             if(source.parent.children[0]?.style.shape !== 'line' && source.parent.children[0]?.value) {
                 sourceName = source.parent.children[0]?.value
             } else {
@@ -25,6 +22,7 @@ export default function ConnectionPreview({cells}) {
                 targetName = target.parent.value
             }
             return {
+                id: source.id + target.id,
                 source: source.value ? `${source.value}#${sourceName}` : source.parent.value, 
                 target: target.value ? `${target.value}#${targetName}` : target.parent.value
             }
@@ -32,8 +30,8 @@ export default function ConnectionPreview({cells}) {
     }
     return (
         <div style={styles.root}>
-            {connections.map((connection, i) => (
-                <div key={keys[i]}>
+            {connections.map(connection => (
+                <div key={connection.id}>
                     {`${connection.source} => ${connection.target}`}
                 </div>
             ))}
