@@ -4,10 +4,11 @@ import generatePorts from './utils/generatePorts';
 import generateFigure from './utils/generateFigure';
 import ConnectionPreview from './components/ConnectionPreview';
 
-// Расширение стандартного метода ConnectionHandler.connect чтобы не давать возможность создавать связи без целевой фигуры
+// Расширение стандартного метода ConnectionHandler.connect для валидации создания связей
 const initConnect = ConnectionHandler.prototype.connect
 ConnectionHandler.prototype.connect = function(source, target, evt, droptarget) {
-    if(!target || target.parent.mxObjectId === source.parent.mxObjectId) return
+    if(!target || target.parent.mxObjectId === source.parent.mxObjectId || target.geometry.x === source.geometry.x) return
+
     return initConnect.apply(this, arguments)
 }
 
@@ -40,6 +41,9 @@ export default function App () {
         // Создание модели и графа
         const model = new GraphDataModel();
         const graph = new Graph(graphContainer, model, [CellEditorHandler, ...plugins, RubberBandHandler])
+
+        // Запрещает отрывание линий от источника и цели
+        graph.setAllowDanglingEdges(false);
 
         // Отслеживание изменений в графе
         const handleGraphChange = (e) => {
@@ -102,7 +106,7 @@ export default function App () {
 
         // Предпросмотр соединения
         connectionHandler.createEdgeState = function (me) {
-            const edge = graph.createEdge();
+            let edge = graph.createEdge();
             return  new CellState(this.graph.view, edge, this.graph.getCellStyle(edge));
         };
 
@@ -407,6 +411,7 @@ export default function App () {
        return () => {
         InternalEvent.removeAllListeners(document)
         graph.destroy()
+        toolbar.destroy()
        }
 
     }, [])
@@ -442,7 +447,7 @@ const styles = {
     },
     container: {
         width: '100%',
-        maxWidth: 'calc(100vw - 150px)',
+        maxWidth: 'calc(100vw - 335px)',
         height: '100%',
         background: 'url(/grid.gif)',
         overflow: 'scroll'

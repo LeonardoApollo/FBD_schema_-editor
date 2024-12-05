@@ -1,11 +1,19 @@
 export default function ConnectionPreview({cells}) {
     const edges = cells.filter(cell => cell.isEdge())
     let connections = [];
+    let keys = [];
     if(edges) {
         connections = edges.map(edge => {
-            const source = edge.source;
-            const target = edge.target;
-            let sourceName, targetName;
+            let sourceName, targetName, source, target;
+            keys.length = 0
+            if(edge.source.geometry.x === 1) {
+                source = edge.source
+                target = edge.target
+            } else {
+                source = edge.target
+                target = edge.source
+            }
+            keys.push(source.id + target.id)
             if(source.parent.children[0]?.style.shape !== 'line' && source.parent.children[0]?.value) {
                 sourceName = source.parent.children[0]?.value
             } else {
@@ -22,6 +30,25 @@ export default function ConnectionPreview({cells}) {
             }
         })
     }
-    console.log(connections)
-    return null
+    return (
+        <div style={styles.root}>
+            {connections.map((connection, i) => (
+                <div key={keys[i]}>
+                    {`${connection.source} => ${connection.target}`}
+                </div>
+            ))}
+        </div>
+    )
+}
+
+const styles = {
+    root: {
+        width: '250px',
+        overflow: 'scroll',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 5,
+        paddingLeft: '5px',
+        marginTop: '10px'
+    },
 }
