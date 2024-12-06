@@ -1,8 +1,9 @@
-import {Graph, InternalEvent, EdgeStyle, CellState, Geometry, UndoManager, getDefaultPlugins,ConnectionHandler, MaxToolbar, GraphDataModel, DragSource, cellArrayUtils, gestureUtils, RubberBandHandler, CellEditorHandler, constants, Point} from '@maxgraph/core';
+import {Graph, InternalEvent, EdgeStyle, CellState, Geometry, VertexHandler, UndoManager, getDefaultPlugins,ConnectionHandler, MaxToolbar, GraphDataModel, DragSource, cellArrayUtils, gestureUtils, RubberBandHandler, CellEditorHandler, constants, Point} from '@maxgraph/core';
 import {useEffect, useRef, useState} from 'react';
 import generatePorts from './utils/generatePorts';
 import generateFigure from './utils/generateFigure';
 import ConnectionPreview from './components/ConnectionPreview';
+import Dialog from './components/Dialog';
 
 // Расширение стандартного метода ConnectionHandler.connect для валидации создания связей
 const initConnect = ConnectionHandler.prototype.connect
@@ -19,21 +20,77 @@ RubberBandHandler.prototype.mouseDown = function(sender, me) {
     return initMouseDown.apply(this, arguments)
 }
 
+// Убирает точки воздействия для изменения размера ячейки
+VertexHandler.prototype.isSizerVisible = function(index) {
+    return false
+}
+
 export default function App () {
-    const graphRef = useRef(null)
-    const toolbarRef = useRef(null)
+    const graphContianerRef = useRef(null)
+    const [graphState, setGraphState] = useState(null)
+
+    const toolbarContainerRef = useRef(null)
+    const [toolbarState, setToolbarState] = useState(null)
+
     const [cellsState, setCellsState] = useState([]);
     const ctrlKeyRef = useRef(null);
     // Здесь временно хранятся скопированные ячейки
     const copiedCells = [];
     let _init = true;
+
+    function addCellImage(graph, toolbar, icon, w, h, type, style) {
+        let cell;
+        _init = true
+        switch(type) {
+            case'start':
+                cell = generateFigure(graph,w,h, 'START', null, style)
+                generatePorts(graph, cell, 0, 1, null)
+                break
+            case'end':
+                cell = generateFigure(graph, w, h, 'END', null, style)
+                generatePorts(graph, cell, 1, 0, null)
+                break
+            case'SR':
+                cell = generateFigure(graph, w, h, 'SR', 'SR0', style)
+                generatePorts(graph, cell, 3, 2, {leftport1: 'EN', leftport2: 'S1', leftport3: 'R', rightport1: 'ENO', rightport2: 'Q1'})
+                break
+            case'AND':
+                cell = generateFigure(graph, w, h, 'AND', null, style)
+                generatePorts(graph, cell, 2, 1, {leftport1: 'IN1', leftport2: 'IN2', rightport1: 'OUT'})
+                break
+            case'TP':
+                cell = generateFigure(graph, w, h, 'TP', 'TP0', style)
+                generatePorts(graph, cell, 2, 2, {leftport1: 'IN', leftport2: 'PT', rightport1: 'Q', rightport2: 'ET'})
+                break
+            default:
+                throw Error('Unsupported figure type')
+        }
+        addToolbarItem(graph, toolbar, cell, icon, undefined);
+    }
+
+    function addToolbarItem(graph, toolbar, prototype, image, title, style) {
+        const funct = (graph, evt, cell) => {
+            const pt = graph.getPointForEvent(evt);
+            const cellToImport = cellArrayUtils.cloneCell(prototype);
+            if (!cellToImport) return;
+            if (cellToImport.geometry) {
+                cellToImport.geometry.x = pt.x;
+                cellToImport.geometry.y = pt.y;
+            }
+            graph.setSelectionCells(graph.importCells([cellToImport], 0, 0, cell));
+            _init = false
+        };
+        const img = toolbar.addMode(title, image, funct, '');
+        gestureUtils.makeDraggable(img, graph, funct);
+    }
+
     useEffect(() => {
-        const graphContainer = graphRef.current
+        const graphContainer = graphContianerRef.current
 
         // Создание тулбара внешний вид настраивается стилем .mxToolbarMode
-        const toolbar = new MaxToolbar(toolbarRef.current)
+        const toolbar = new MaxToolbar(toolbarContainerRef.current)
         toolbar.enabled = false
-
+        setToolbarState(toolbar)
         // Убираем стандартное контекстное меню и добавляем стандартные плагины
         InternalEvent.disableContextMenu(graphContainer)
         const plugins = getDefaultPlugins();
@@ -41,9 +98,12 @@ export default function App () {
         // Создание модели и графа
         const model = new GraphDataModel();
         const graph = new Graph(graphContainer, model, [CellEditorHandler, ...plugins, RubberBandHandler])
-
+        setGraphState(graph)
         // Запрещает отрывание линий от источника и цели
         graph.setAllowDanglingEdges(false);
+
+        // Запрещает изменение размера ячеек
+        graph.setCellsResizable(false)
 
         // Отслеживание изменений в графе
         const handleGraphChange = (e) => {
@@ -68,9 +128,14 @@ export default function App () {
         graph.isCellLocked = function (cell) {
             return this.isCellsLocked();
         };
-        graph.isCellResizable = function (cell) {
+        // Запрещает удаление отсносительных ячеек
+        graph.isCellDeletable = function (cell) {
             const geo = cell.getGeometry();
             return geo == null || !geo.relative;
+        }
+        // Запрещает изменения размера ячеек
+        graph.isCellResizable = function (cell) {
+            return false
         };
 
         // При слишком длинном названии лейбла сокращает его чтобы поместить в фигуру 
@@ -116,19 +181,6 @@ export default function App () {
 
         // Отключает подсказки при наведение на соединение
         graph.setTooltips(false);
-
-        // Сама подсказка при наведение на соединение внешний вид настраивается стилем .mxTooltip
-        // graph.getTooltipForCell = function (cell) {
-        //     if (cell && cell.isEdge()) {
-        //       const source = cell.getTerminal(true);
-        //       const target = cell.getTerminal(false);
-        //       console.log(source)
-        //       if (source && target) {
-        //         return `${source.value} => ${target.value}`;
-        //       }
-        //     }
-        //     return Graph.prototype.getTooltipForCell.apply(this, [cell]);
-        // };
 
         graph.isCellFoldable = _cell => false;
 
@@ -244,7 +296,7 @@ export default function App () {
                     view.validateBackgroundPage(); 
                     InternalEvent.consume(evt);
                 }
-        }, graphRef.current)
+        }, graphContainer)
 
         // Подключения события для перемещения по графу
         let isDragging = false;
@@ -349,67 +401,16 @@ export default function App () {
             }
         })
 
-        function addCellImage(icon, w, h, type, style) {
-            let cell;
-            switch(type) {
-                case'start':
-                    cell = generateFigure(graph,w,h, 'START', null, style)
-                    generatePorts(graph, cell, 0, 1, null)
-                    break
-                case'end':
-                    cell = generateFigure(graph, w, h, 'END', null, style)
-                    generatePorts(graph, cell, 1, 0, null)
-                    break
-                case'SR':
-                    cell = generateFigure(graph, w, h, 'SR', 'SR0', style)
-                    generatePorts(graph, cell, 3, 2, {leftport1: 'EN', leftport2: 'S1', leftport3: 'R', rightport1: 'ENO', rightport2: 'Q1'})
-                    break
-                case'AND':
-                    cell = generateFigure(graph, w, h, 'AND', null, style)
-                    generatePorts(graph, cell, 2, 1, {leftport1: 'IN1', leftport2: 'IN2', rightport1: 'OUT'})
-                    break
-                case'TP':
-                    cell = generateFigure(graph, w, h, 'TP', 'TP0', style)
-                    generatePorts(graph, cell, 2, 2, {leftport1: 'IN', leftport2: 'PT', rightport1: 'Q', rightport2: 'ET'})
-                    break
-                default:
-                    throw Error('Unsupported figure type')
-            }
-            addToolbarItem(graph, toolbar, cell, icon, undefined);
-        }
-
         // SR 
-        addCellImage('/SR.svg', 100, 60, 'SR', {editable: true});
+        addCellImage(graph,toolbar,'/SR.svg', 100, 60, 'SR', {editable: true});
         // Start
-        addCellImage('/start.svg', 60, 20, 'start', {editable: true});
+        addCellImage(graph,toolbar,'/start.svg', 60, 20, 'start', {editable: true});
         //End
-        addCellImage('/end.svg', 60, 20, 'end', {editable: true});
+        addCellImage(graph,toolbar,'/end.svg', 60, 20, 'end', {editable: true});
         //AND
-        addCellImage('/AND.svg', 100, 40, 'AND', {editable: true});
+        addCellImage(graph,toolbar,'/AND.svg', 100, 40, 'AND', {editable: true});
         // TP
-        addCellImage('/TP.svg', 100, 40, 'TP',  {editable: true});
-        graph.importCells
-        function addToolbarItem(graph, toolbar, prototype, image, title, style) {
-            const funct = (graph, evt, cell) => {
-                _init = false
-                const pt = graph.getPointForEvent(evt);
-                const cellToImport = cellArrayUtils.cloneCell(prototype);
-                if (!cellToImport) return;
-                if (cellToImport.geometry) {
-                    cellToImport.geometry.x = pt.x;
-                    cellToImport.geometry.y = pt.y;
-                }
-                graph.setSelectionCells(graph.importCells([cellToImport], 0, 0, cell));
-            };
-            const img = toolbar.addMode(title, image, funct, '');
-            gestureUtils.makeDraggable(img, graph, funct);
-        }
-    
-        // Устанавливает дочерние ячейки как порты, что приводит к тому что их соединения становятся родительскими!
-        // graph.isPort = function (cell) {
-        //     const geo = cell?.getGeometry();
-        //     return geo?.relative ?? false;
-        // };
+        addCellImage(graph,toolbar,'/TP.svg', 100, 40, 'TP',  {editable: true});
 
        return () => {
         InternalEvent.removeAllListeners(document)
@@ -420,23 +421,27 @@ export default function App () {
     }, [])
 
     return (
-        <div style={styles.root}>
-            <div ref={toolbarRef} style={styles.toolbar}/>
-            <div style={styles.main}>
-                <div style={styles.container} ref={graphRef} id='graph-container'/>
+        <>
+            <div style={styles.root}>
+                <div ref={toolbarContainerRef} style={styles.toolbar}/>
+                <div style={styles.main}>
+                    <div style={styles.container} ref={graphContianerRef} id='graph-container'/>
+                </div>
+                {cellsState && <ConnectionPreview cells={cellsState}/>}
             </div>
-            {cellsState && <ConnectionPreview cells={cellsState}/>}
-        </div>
+            <Dialog addToToolbar={addToolbarItem} graph={graphState} toolbar={toolbarState}/>
+        </>
     )
 }
 
 const styles = {
     root: {
-        display: 'flex'
+        display: 'flex',
+        height: '100vh'
     },
     toolbar: {
         minWidth: '150px',
-        height: '100vh',
+        maxHeight: 'calc(100vh - 50px)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'scroll',

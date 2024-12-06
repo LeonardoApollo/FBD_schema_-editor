@@ -22,7 +22,7 @@ export default function ConnectionPreview({cells}) {
                 targetName = target.parent.value
             }
             return {
-                id: source.id + target.id,
+                id: edge.id,
                 source: source.value ? `${source.value}#${sourceName}` : source.parent.value, 
                 target: target.value ? `${target.value}#${targetName}` : target.parent.value
             }
