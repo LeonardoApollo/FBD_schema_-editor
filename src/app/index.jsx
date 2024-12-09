@@ -1,5 +1,25 @@
-import {Graph, InternalEvent, EdgeStyle, CellState, Geometry, VertexHandler, UndoManager, getDefaultPlugins,ConnectionHandler, MaxToolbar, GraphDataModel, DragSource, cellArrayUtils, gestureUtils, RubberBandHandler, CellEditorHandler, constants, Point} from '@maxgraph/core';
-import {useEffect, useRef, useState} from 'react';
+import {
+    Graph, 
+    InternalEvent, 
+    CellState, 
+    Geometry,
+    VertexHandler, 
+    UndoManager, 
+    getDefaultPlugins,
+    ConnectionHandler, 
+    MaxToolbar, 
+    GraphDataModel, 
+    SelectionHandler,
+    DragSource, 
+    cellArrayUtils, 
+    gestureUtils,
+    RubberBandHandler, 
+    CellEditorHandler, 
+    constants, 
+    GraphView, 
+    EdgeHandler
+} from '@maxgraph/core';
+import {useEffect, useRef, useState, useCallback} from 'react';
 import generatePorts from './utils/generatePorts';
 import generateFigure from './utils/generateFigure';
 import ConnectionPreview from './components/ConnectionPreview';
@@ -14,16 +34,30 @@ ConnectionHandler.prototype.connect = function(source, target, evt, droptarget) 
 }
 
 // Расширение плаина RubberBandHandler, чтобы он не срабатывал при нажатии на ПКМ
-const initMouseDown = RubberBandHandler.prototype.mouseDown
+const initMouseDownRubber = RubberBandHandler.prototype.mouseDown
 RubberBandHandler.prototype.mouseDown = function(sender, me) {
     this.enabled = me.evt.button !== 2
-    return initMouseDown.apply(this, arguments)
+    return initMouseDownRubber.apply(this, arguments)
 }
 
 // Убирает точки воздействия для изменения размера ячейки
 VertexHandler.prototype.isSizerVisible = function(index) {
     return false
 }
+
+// Предотвращает перетаскивание выделенной ячейки при нажатии ПКМ
+const initMouseDownSelection = SelectionHandler.prototype.mouseDown
+SelectionHandler.prototype.mouseDown = function(sender, me) {
+    if(me.evt.button === 2) return
+    return initMouseDownSelection.apply(this, arguments)
+}
+
+// Отключает возможность вставлять ячейки друг в друга
+SelectionHandler.prototype.isValidDropTarget = function(cell, me) {
+    return false
+}
+
+CellState.prototype.getCellBounds = () => null
 
 export default function App () {
     const graphContianerRef = useRef(null)
@@ -68,7 +102,7 @@ export default function App () {
         addToolbarItem(graph, toolbar, cell, icon, undefined);
     }
 
-    function addToolbarItem(graph, toolbar, prototype, image, title, style) {
+    const addToolbarItem = useCallback((graph, toolbar, prototype, image, title, style) => {
         const funct = (graph, evt, cell) => {
             const pt = graph.getPointForEvent(evt);
             const cellToImport = cellArrayUtils.cloneCell(prototype);
@@ -92,7 +126,7 @@ export default function App () {
             })
             gestureUtils.makeDraggable(image, graph, funct);
         } 
-    }
+    }, [])
 
     useEffect(() => {
         const graphContainer = graphContianerRef.current
@@ -122,6 +156,38 @@ export default function App () {
                 setCellsState(cells)
             }
         }
+
+        // Отвечает за огибание линиями ячеек
+        EdgeHandler.prototype.snapToTerminals = true;
+        ConnectionHandler.prototype.movePreviewAway = false;
+        graph.disconnectOnMove = false;
+        graph.options.foldingEnabled = false;
+        graph.cellsResizable = false;
+        graph.extendParents = false;
+        graph.setConnectable(true);
+        graph.view.updateFixedTerminalPoint = function (edge, terminal, source, constraint) {
+                GraphView.prototype.updateFixedTerminalPoint.apply(this, arguments);
+                const pts = edge.absolutePoints;
+                const pt = pts[source ? 0 : pts.length - 1];
+                if (terminal != null && pt == null && this.getPerimeterFunction(terminal) == null) {
+                  edge.setAbsoluteTerminalPoint(new Point(this.getRoutingCenterX(terminal), this.getRoutingCenterY(terminal)), source);
+                }
+        };
+        graph.addListener(InternalEvent.CELLS_MOVED, (sender, evt) => {
+            const cells = evt.properties?.cells || []
+            if(cells.length) {
+                cells.forEach(cell => {
+                    cell.children?.forEach(port => {
+                        port.edges?.forEach(edge => {
+                            const geometry = edge.getGeometry();
+                            geometry.points = null
+                            edge.setGeometry(geometry)
+                        })
+                    })
+                })
+            }
+            graph.refresh()
+        })
         
         // UNDO/REDO
         const undoManager = new UndoManager();
@@ -130,7 +196,6 @@ export default function App () {
         };
         graph.getDataModel().addListener(InternalEvent.UNDO, listener);
         graph.getView().addListener(InternalEvent.UNDO, listener);
-
         // Делает возможным редактирование лейблы в фигурах
         graph.setCellsEditable(true)
 
@@ -143,12 +208,8 @@ export default function App () {
             const geo = cell.getGeometry();
             return geo == null || !geo.relative;
         }
-        // Запрещает изменения размера ячеек
-        graph.isCellResizable = function (cell) {
-            return false
-        };
 
-        // При слишком длинном названии лейбла сокращает его чтобы поместить в фигуру 
+        // При слишком длинном названии лейбла сокращает его чтобы поместить в ячейку 
         graph.getLabel = function (cell) {
             const label = this.labelsVisible ? this.convertValueToString(cell) : '';
             const geometry = cell.getGeometry();
@@ -175,7 +236,7 @@ export default function App () {
         style.fontColor = '#000000';
         style.fillColor = '#FFFFFF';
         style.labelBackgroundColor = '#FFFFFF'
-        style.edgeStyle = EdgeStyle.ElbowConnector
+        style.edgeStyle = 'orthogonalEdgeStyle'
 
         const connectionHandler = graph.getPlugin('ConnectionHandler');
 
@@ -233,34 +294,38 @@ export default function App () {
         const handleDelete = (e) => {
             if(e.key === 'Backspace' && !editorHadler.editingCell) {
                 const cells = graph.getSelectionCells();
+                cells.forEach(cell =>  {
+                    graph.model.remove(cell)
+                    graph.removeStateForCell(cell)
+                })
                 graph.removeCells(cells);
+                handleGraphChange()
             }
         }
         const handleCopyCells = (e ,isCtrlKey) => {
             // Проверка нажатия Ctrl + C
             if (isCtrlKey && e.keyCode === 67) { 
-                const cells = graph.getSelectionCells(); // Получаем выделенные ячейки
-                copiedCells.length = 0; // Очищаем массив перед копированием
+                const cells = graph.getSelectionCells(); 
+                copiedCells.length = 0; 
                 for (let i = 0; i < cells.length; i++) {
-                    copiedCells.push(cells[i]); // Копируем ячейки в массив
+                    copiedCells.push(cells[i]); 
                 }
-                e.preventDefault(); // Отменяем стандартное поведение
+                e.preventDefault();
             }
     
             // Проверка нажатия Ctrl + V
             if (isCtrlKey && e.keyCode === 86) { 
                 if (copiedCells.length > 0) {
-                    const parent = graph.getDefaultParent(); // Получаем родительский узел (обычно это слой графа)
+                    const parent = graph.getDefaultParent(); 
                     for (let i = 0; i < copiedCells.length; i++) {
                         // Дублируем каждую скопированную ячейку
                         const clone = graph.cloneCell(copiedCells[i]);
-                        const cellGeometry = copiedCells[i].getGeometry(); // Получаем геометрию оригинальной ячейки
+                        const cellGeometry = copiedCells[i].getGeometry(); 
                         // Изменяем позицию на 20 пикселей вправо и вниз для вставленной ячейки
                         if (cellGeometry) {
                             clone.setGeometry(new Geometry(cellGeometry.x + 20, cellGeometry.y + 20, cellGeometry.width, cellGeometry.height));
                         }
                         graph.setSelectionCells(graph.importCells([clone], 0, 0, parent));
-                        // graph.addCell(clone, parent); // Добавляем ячейку в граф
                     }
                 }
                 e.preventDefault();
@@ -313,7 +378,7 @@ export default function App () {
         let lastMouseX, lastMouseY;
         const originalCursor = graph.container.style.cursor;
         InternalEvent.addListener(graph.container, 'mousedown', (e) => {
-            if (e.button === 2) { 
+            if (e.button === 2) {
                 isDragging = true;
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
@@ -349,67 +414,6 @@ export default function App () {
         graph.addListener(InternalEvent.CELLS_ADDED, handleGraphChange)
 
         graph.addListener(InternalEvent.CELLS_REMOVED, handleGraphChange)
-
-        graph.addListener(InternalEvent.CELLS_RESIZED, (sender, evt) => {
-            const evtCell = evt.properties.cells[0];
-            const figureHeight = evtCell.geometry.height;
-            let rightPortCount = 0, leftPortCount = 0
-            evtCell.children.forEach((port) => {
-                if(port.connectable) {
-                    if(port.geometry._x === 1) {
-                        rightPortCount += 1
-                    } else {
-                        leftPortCount += 1
-                    }
-                }
-            })
-
-            const portsPositions = calculatePortPositions(figureHeight, Math.max(leftPortCount, rightPortCount));
-
-            // Устанавливаем новые Y-координаты для левых портов
-            let leftOffset = 0;
-            evtCell.children.forEach((port) => {
-                if (port.connectable && port.geometry.x !== 1) {
-                    port.geometry.offset = new Point(-10, portsPositions[leftOffset])
-                    leftOffset++;
-                }
-            });
-
-            // Устанавливаем новые Y-координаты для правых портов
-            let rightOffset = 0;
-            evtCell.children.forEach((port) => {
-                if (port.connectable && port.geometry.x === 1) {
-                    port.geometry.offset = new Point(0, portsPositions[rightOffset]);
-                    rightOffset++;
-                }
-            });
-
-            function calculatePortPositions(figureHeight, portCount) {
-                if (portCount === 0) return []; // Если портов нет, возвращаем пустой массив
-
-                const positions = [];
-
-                // Доступная высота для распределения портов
-                const totalDistance = (portCount - 1) * 10; // Задаем расстояние между портами
-                const availableHeight = figureHeight - totalDistance; // Высота, доступная для размещения портов
-
-                // Если доступная высота меньше или равна нулю, отдаем равные координаты для всех портов
-                if (portCount === 1) {
-                    const equalY = figureHeight / 2 - (totalDistance / 2);
-                    positions.push(equalY - 1);
-                } else {
-                    let currentY = Math.round((figureHeight - (availableHeight - (figureHeight / portCount))) / 2);
-
-                    // Распределяем порты по высоте
-                    for (let i = 0; i < portCount; i++) {
-                        positions.push(currentY - Math.round(portCount * 5.35));
-                        currentY += Math.round(figureHeight / portCount); // Переходим к следующему порту
-                    }
-                }
-
-                return positions;
-            }
-        })
 
         // SR 
         addCellImage(graph,toolbar,'/SR.svg', 100, 60, 'SR', {editable: true});
@@ -455,7 +459,7 @@ const styles = {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'scroll',
-        gap: 5,
+        gap: 10,
         flex: 0
     },
     main: {

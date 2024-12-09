@@ -1,11 +1,10 @@
-import {useRef, useEffect, useState, Children} from 'react';
+import {useRef, useEffect, useState, Children, memo} from 'react';
 import generateFigure from '../utils/generateFigure';
 import generatePorts from '../utils/generatePorts';
-import {ImageBox} from '@maxgraph/core';
 
 const initFormState = {id: '', title: '', leftPortsNum: 0, rightPortsNum: 0, leftPorts: [], rightPorts: []}
 
-export default function Dialog({graph, toolbar, addToToolbar}) {
+export default memo(function Dialog({graph, toolbar, addToToolbar}) {
     const rootRef = useRef(null);
     const [isOpen, setIsOpen] = useState(false);
     const [formState, setFormState] = useState(initFormState)
@@ -37,7 +36,7 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
 
     const createSvgCell = (text, color, stroke, width, height) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
                 <rect width="${width}" height="${height}" fill="${color}" stroke="${stroke}" />
-                <text x="50%" y="50%" font-family="Arial,Helvetica" dominant-baseline="middle" text-anchor="middle" fill="#774400">${text}</text>
+                <text x="50%" y="50%" font-size="11px" font-family="Arial,Helvetica" dominant-baseline="middle" text-anchor="middle" fill="#774400">${text}</text>
                </svg>`;
 
     const updatePorts = (num, portType, newState) => {
@@ -59,12 +58,14 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
         e.preventDefault()
         const defWight = 100;
         const defHeight = 20;
+        const max = defWight / (11 * 0.625)
         const heigth = defHeight * (Math.max(formState.rightPortsNum, formState.leftPortsNum));
         const cell = generateFigure(graph, defWight, heigth || defHeight, formState.title, formState.id, {editable: true})
         const portNames = {};
         formState.leftPorts.forEach((port, idx) => portNames[`leftport${idx + 1}`] = port)
         formState.rightPorts.forEach((port, idx) => portNames[`rightport${idx + 1}`] = port)
-        const svgCode = createSvgCell(formState.title, '#c3d9ff', '#6482b9', defWight, heigth || defHeight)
+        const title = formState.title.length > max ? `${formState.title.substring(0, max)}...` : formState.title;
+        const svgCode = createSvgCell(title, '#c3d9ff', '#6482b9', defWight, heigth || defHeight)
         const svgImage = new Image(defWight, heigth)
         svgImage.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgCode);
         svgImage.className = 'mxToolbarMode'
@@ -102,7 +103,7 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
                         <div style={styles.section}>
                             <div style={styles.ports}>
                                 <label style={styles.label}>
-                                    Кол-во левых портов:
+                                    Кол-во входов:
                                     <input style={styles.inputNum}  className='leftPortsNum' type='text' value={formState.leftPortsNum} onChange={handleFormChange}/>
                                 </label>
                                 {!!formState.leftPorts.length && Children.toArray(formState.leftPorts.map((port , idx) => (
@@ -114,7 +115,7 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
                             </div>
                             <div style={styles.ports}>
                                 <label style={styles.label}>
-                                    Кол-во правых портов:
+                                    Кол-во выходов:
                                     <input style={styles.inputNum} className='rightPortsNum' type='text' value={formState.rightPortsNum} onChange={handleFormChange}/>
                                 </label>
                                 {!!formState.rightPorts.length && Children.toArray(formState.rightPorts.map((port , idx) => (
@@ -132,7 +133,7 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
             <button onClick={handleOpenDialog} style={styles.openBtn}>Create Element</button>
         </>   
     )
-}
+})
 
 const styles = {
     root: {

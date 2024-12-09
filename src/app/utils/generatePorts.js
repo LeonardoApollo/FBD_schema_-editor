@@ -28,7 +28,7 @@ export default function generatePorts(graph, cell, leftPorts, rightPorts, names)
     let leftPortShape, rightPortShape;
     for(let i = 0; i < leftPorts; i++) {
         if(!leftPortShape) {
-            leftPortShape = graph.insertVertex(cell, null, names ? names[`leftport${i + 1}`] : '', 0, 0, 10, 2, {...commonPortStyles, align: 'left',routingCenterX: -0.5, spacingLeft: 12})
+            leftPortShape = graph.insertVertex(cell, null, names ? names[`leftport${i + 1}`] : '', 0, 0, 10, 2, {...commonPortStyles, align: 'left',routingCenterX: -0.5, spacingLeft: 12, portConstraint: 'west'})
             leftPortShape.geometry.relative = true;
             leftPortShape.geometry.offset = new Point(-leftPortShape.geometry.width, 9);
         } else {
@@ -40,7 +40,7 @@ export default function generatePorts(graph, cell, leftPorts, rightPorts, names)
     }
     for(let i = 0; i < rightPorts; i++) {
         if(!rightPortShape) {
-            rightPortShape = graph.insertVertex(cell, null, names ? names[`rightport${i + 1}`] : '' , 1, 0, 10, 2, {...commonPortStyles, align: 'right',routingCenterX: 0.5, spacingRight: 12})
+            rightPortShape = graph.insertVertex(cell, null, names ? names[`rightport${i + 1}`] : '' , 1, 0, 10, 2, {...commonPortStyles, align: 'right',routingCenterX: 0.5, spacingRight: 12, portConstraint: 'east'})
             rightPortShape.geometry.relative = true;
             rightPortShape.geometry.offset = new Point(0, 9);
         } else {
