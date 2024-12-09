@@ -1,6 +1,7 @@
 import {useRef, useEffect, useState, Children} from 'react';
 import generateFigure from '../utils/generateFigure';
 import generatePorts from '../utils/generatePorts';
+import {ImageBox} from '@maxgraph/core';
 
 const initFormState = {id: '', title: '', leftPortsNum: 0, rightPortsNum: 0, leftPorts: [], rightPorts: []}
 
@@ -34,6 +35,11 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
         
     }
 
+    const createSvgCell = (text, color, stroke, width, height) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+                <rect width="${width}" height="${height}" fill="${color}" stroke="${stroke}" />
+                <text x="50%" y="50%" font-family="Arial,Helvetica" dominant-baseline="middle" text-anchor="middle" fill="#774400">${text}</text>
+               </svg>`;
+
     const updatePorts = (num, portType, newState) => {
         const prevPorts = newState[portType];
         prevPorts.length = num;
@@ -53,13 +59,17 @@ export default function Dialog({graph, toolbar, addToToolbar}) {
         e.preventDefault()
         const defWight = 100;
         const defHeight = 20;
-        const cell = generateFigure(graph, defWight, defHeight * (Math.max(formState.rightPortsNum, formState.leftPortsNum)) || defHeight, formState.title, formState.id, {editable: true})
+        const heigth = defHeight * (Math.max(formState.rightPortsNum, formState.leftPortsNum));
+        const cell = generateFigure(graph, defWight, heigth || defHeight, formState.title, formState.id, {editable: true})
         const portNames = {};
         formState.leftPorts.forEach((port, idx) => portNames[`leftport${idx + 1}`] = port)
         formState.rightPorts.forEach((port, idx) => portNames[`rightport${idx + 1}`] = port)
-        console.log(portNames)
+        const svgCode = createSvgCell(formState.title, '#c3d9ff', '#6482b9', defWight, heigth || defHeight)
+        const svgImage = new Image(defWight, heigth)
+        svgImage.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgCode);
+        svgImage.className = 'mxToolbarMode'
         generatePorts(graph, cell, formState.leftPortsNum, formState.rightPortsNum, portNames)
-        addToToolbar(graph, toolbar, cell, '/start.svg', undefined);
+        addToToolbar(graph, toolbar, cell, svgImage, undefined);
         setIsOpen(false)
     }
 
@@ -173,7 +183,9 @@ const styles = {
     ports: {
         width: '100%',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        maxHeight: 'calc(100vh - 438px)',
+        overflow: 'scroll'
     },
     inputNum: {
         width: '20px',
@@ -181,7 +193,7 @@ const styles = {
     },
     input: {
         marginLeft: '10px',
-        width: '100%'
+        width: '94%'
     }
 }
 

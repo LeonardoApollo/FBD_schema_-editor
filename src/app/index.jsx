@@ -80,8 +80,18 @@ export default function App () {
             graph.setSelectionCells(graph.importCells([cellToImport], 0, 0, cell));
             _init = false
         };
-        const img = toolbar.addMode(title, image, funct, '');
-        gestureUtils.makeDraggable(img, graph, funct);
+        let img;
+        if(typeof image === 'string') {
+            img = toolbar.addMode(title, image, funct, '');
+            gestureUtils.makeDraggable(img, graph, funct);
+        } else {
+            toolbarContainerRef.current.appendChild(image)
+            toolbar.addItem('',null, () => {
+                const cell = graph.importCell(prototype)
+                graph.addCell(cell)
+            })
+            gestureUtils.makeDraggable(image, graph, funct);
+        } 
     }
 
     useEffect(() => {

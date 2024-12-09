@@ -17,6 +17,9 @@ html, body {
   object-fit: contain;
   margin: 0 auto;
 }
+.mxToolbarItem {
+  display: none
+}
 .mxTooltip {
   width: fit-content;
   position: absolute;
