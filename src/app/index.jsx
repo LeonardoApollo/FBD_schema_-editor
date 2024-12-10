@@ -24,6 +24,9 @@ import generatePorts from './utils/generatePorts';
 import generateFigure from './utils/generateFigure';
 import ConnectionPreview from './components/ConnectionPreview';
 import Dialog from './components/Dialog';
+import TestScript from './test/testscript';
+import generateCell from './utils/generateCell';
+
 
 // Расширение стандартного метода ConnectionHandler.connect для валидации создания связей
 const initConnect = ConnectionHandler.prototype.connect
@@ -33,7 +36,7 @@ ConnectionHandler.prototype.connect = function(source, target, evt, droptarget) 
     return initConnect.apply(this, arguments)
 }
 
-// Расширение плаина RubberBandHandler, чтобы он не срабатывал при нажатии на ПКМ
+// Расширение пла плагина RubberBandHandler, чтобы он не срабатывал при нажатии на ПКМ
 const initMouseDownRubber = RubberBandHandler.prototype.mouseDown
 RubberBandHandler.prototype.mouseDown = function(sender, me) {
     this.enabled = me.evt.button !== 2
@@ -57,8 +60,6 @@ SelectionHandler.prototype.isValidDropTarget = function(cell, me) {
     return false
 }
 
-CellState.prototype.getCellBounds = () => null
-
 export default function App () {
     const graphContianerRef = useRef(null)
     const [graphState, setGraphState] = useState(null)
@@ -71,7 +72,17 @@ export default function App () {
     // Здесь временно хранятся скопированные ячейки
     const copiedCells = [];
     let _init = true;
-
+    const scriptTree = {};
+    let currMethod = '';
+    Object.entries(TestScript).map(([name, fn]) => fn.toString().split('\n').forEach((line, idx) => {
+        if(idx == 0) {
+            const name = line.replace(/\W/g, '')
+            currMethod = name
+            scriptTree[currMethod] = []
+        } else {
+            scriptTree[currMethod].push([`command${idx}`, line.trim()]);
+        }
+    }))
     function addCellImage(graph, toolbar, icon, w, h, type, style) {
         let cell;
         _init = true
@@ -295,8 +306,10 @@ export default function App () {
             if(e.key === 'Backspace' && !editorHadler.editingCell) {
                 const cells = graph.getSelectionCells();
                 cells.forEach(cell =>  {
-                    graph.model.remove(cell)
-                    graph.removeStateForCell(cell)
+                    if(!cell.connectable || cell.edge) {
+                        graph.model.remove(cell)
+                        graph.removeStateForCell(cell)
+                    }
                 })
                 graph.removeCells(cells);
                 handleGraphChange()
@@ -322,10 +335,11 @@ export default function App () {
                         const clone = graph.cloneCell(copiedCells[i]);
                         const cellGeometry = copiedCells[i].getGeometry(); 
                         // Изменяем позицию на 20 пикселей вправо и вниз для вставленной ячейки
-                        if (cellGeometry) {
+                        if (cellGeometry && clone) {
+                            console.log(copiedCells[i])
                             clone.setGeometry(new Geometry(cellGeometry.x + 20, cellGeometry.y + 20, cellGeometry.width, cellGeometry.height));
                         }
-                        graph.setSelectionCells(graph.importCells([clone], 0, 0, parent));
+                        graph.setSelectionCells(graph.importCells([clone || copiedCells[i]], 0, 0, parent));
                     }
                 }
                 e.preventDefault();
@@ -426,6 +440,47 @@ export default function App () {
         // TP
         addCellImage(graph,toolbar,'/TP.svg', 100, 40, 'TP',  {editable: true});
 
+        const transition = scriptTree.transition1;
+        const parent = graph.getDefaultParent();
+        const initialX = 100; 
+        const initialY = 100;
+        const offsetX = 150;
+        const offsetY = 120;
+        let currentX = initialX;
+        let currentY = initialY;
+        graph.batchUpdate(() => {
+            const transitionCellPrototype = generateCell(graph, 'Transition')
+            const transitionCell = graph.importCells([transitionCellPrototype])
+            const geometry = transitionCell[0].getGeometry();
+            if(geometry) {
+                geometry.x = initialX + (offsetX * 1.5)
+                geometry.y = initialY + (offsetY * 0.7)
+                transitionCell[0].setGeometry(geometry)
+            }
+            transition.forEach(([name, code]) => {
+                const devices = code.match(/([A-Z]\w*\.\w+)/g)
+                if(devices) {
+                    devices.forEach((device, idx) => {
+                        const afterDot = device.split('.')
+                        const prototype = generateCell(graph, device)
+                        const cells = graph.importCells([prototype])
+                        const geometry = cells[0].getGeometry();
+                        if(geometry) {
+                            geometry.x = currentX;
+                            geometry.y = currentY;
+                            cells[0].setGeometry(geometry)
+                        }
+                        const source = cells[0].children.find(child => child.value == afterDot[1])
+                        const target = transitionCell[0].children.find(child => (!child.edges.length && child.value !== 'Step'))
+                        graph.insertEdge(parent, null, '', source, target)
+                        currentX = initialX;
+                        currentY += offsetY;
+                    })
+                }
+            })
+            _init = false;
+            handleGraphChange()
+        })
        return () => {
         InternalEvent.removeAllListeners(document)
         graph.destroy()

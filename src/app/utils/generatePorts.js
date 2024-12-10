@@ -50,7 +50,4 @@ export default function generatePorts(graph, cell, leftPorts, rightPorts, names)
             cell.insert(rightPort)
         }
     }
-
-
-    
 }
