@@ -80,7 +80,7 @@ export default function App () {
             currMethod = name
             scriptTree[currMethod] = []
         } else {
-            scriptTree[currMethod].push([`command${idx}`, line.trim()]);
+            scriptTree[currMethod].push(line.trim());
         }
     }))
     function addCellImage(graph, toolbar, icon, w, h, type, style) {
@@ -309,9 +309,9 @@ export default function App () {
                     if(!cell.connectable || cell.edge) {
                         graph.model.remove(cell)
                         graph.removeStateForCell(cell)
+                        graph.removeCells([cell])
                     }
                 })
-                graph.removeCells(cells);
                 handleGraphChange()
             }
         }
@@ -440,44 +440,123 @@ export default function App () {
         // TP
         addCellImage(graph,toolbar,'/TP.svg', 100, 40, 'TP',  {editable: true});
 
-        const transition = scriptTree.transition1;
         const parent = graph.getDefaultParent();
-        const initialX = 100; 
-        const initialY = 100;
-        const offsetX = 150;
+        const initialX = 10; 
+        const initialY = 400;
+        const offsetX = 100;
         const offsetY = 120;
+        const blockPaddingX = 200;
+        const blockPaddingY = 180;
+        const blockOffsetX = 400;
         let currentX = initialX;
         let currentY = initialY;
+        let currentBlockX = initialX;
+        let currentBlockY = initialY
+        console.log(scriptTree)
+        const handleBlockGeometry = (cell, offsetX) => {
+                const geometry = cell.getGeometry();
+                geometry.x = currentBlockX
+                geometry.y = currentBlockY
+                currentX = currentBlockX - blockPaddingX
+                currentY = currentBlockY - blockPaddingY
+                cell.setGeometry(geometry)
+                currentBlockX += offsetX || blockOffsetX;
+                currentBlockY = initialY
+        }
+        const handleCellGeometry = (cell, rightSide) => {
+            const geometry = cell.getGeometry();
+            geometry.x = rightSide ? currentX + 400 : currentX + 50;
+            geometry.y = currentY;
+            cell.setGeometry(geometry)
+            currentY += offsetY;
+        }
         graph.batchUpdate(() => {
-            const transitionCellPrototype = generateCell(graph, 'Transition')
-            const transitionCell = graph.importCells([transitionCellPrototype])
-            const geometry = transitionCell[0].getGeometry();
-            if(geometry) {
-                geometry.x = initialX + (offsetX * 1.5)
-                geometry.y = initialY + (offsetY * 0.7)
-                transitionCell[0].setGeometry(geometry)
-            }
-            transition.forEach(([name, code]) => {
-                const devices = code.match(/([A-Z]\w*\.\w+)/g)
-                if(devices) {
-                    devices.forEach((device, idx) => {
-                        const afterDot = device.split('.')
-                        const prototype = generateCell(graph, device)
-                        const cells = graph.importCells([prototype])
-                        const geometry = cells[0].getGeometry();
-                        if(geometry) {
-                            geometry.x = currentX;
-                            geometry.y = currentY;
-                            cells[0].setGeometry(geometry)
+            const keys = Object.keys(scriptTree)
+            let prevStep = null
+            let transitionSide = null
+            for(const key of keys) {
+                if(key.indexOf('start') !== -1) {
+                    const startPrototype = generateCell(graph, key);
+                    const startCell = graph.importCells([startPrototype])[0];
+                    handleBlockGeometry(startCell, offsetX)
+                    prevStep = startCell
+                }
+                if(key.indexOf('step') !== -1) {
+                    const stepPrototype = generateCell(graph, key)
+                    const stepCell = graph.importCells([stepPrototype])[0];
+                    let source;
+                    if(prevStep) {
+                        if(prevStep.value == 'start') source = prevStep.children[0]
+                        if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
+                        if(transitionSide) {
+                            source = prevStep.children.find(child => child.value === transitionSide)
+                            transitionSide = null   
                         }
-                        const source = cells[0].children.find(child => child.value == afterDot[1])
-                        const target = transitionCell[0].children.find(child => (!child.edges.length && child.value !== 'Step'))
-                        graph.insertEdge(parent, null, '', source, target)
-                        currentX = initialX;
-                        currentY += offsetY;
+                    }
+                    const target = stepCell.children.find(child => child.value == 'BEGIN')
+                    graph.insertEdge(parent, null, '', source, target)
+                    handleBlockGeometry(stepCell)
+                    prevStep = stepCell
+                    const devices = [];
+                    scriptTree[key].forEach(code => {
+                        const device = code.match(/const\s+([A-Z]\w+_\d+)/)
+                        if(device) {
+                            const devicePrototype = generateCell(graph, device[1])
+                            const deviceCell = graph.importCells([devicePrototype])[0]
+                            handleCellGeometry(deviceCell, true)
+                            devices.push(deviceCell)
+                        }
+                        if(devices.length && code.indexOf('this')!== -1 ) {
+                            // if(devices.findIndex((device) => device.value.indexOf))
+                        }
+                    })
+                    
+                }
+                if(key.indexOf('transition') !== -1) {
+                    let side = null;
+                    const transitionPrototype = generateCell(graph, key)
+                    const transitionCell = graph.importCells([transitionPrototype])[0];
+                    let source;
+                    if(prevStep && prevStep.value == 'start') {
+                        source = prevStep.children[0]
+                    } else if(prevStep && prevStep.value.indexOf('step') !== -1) {
+                        source = prevStep.children.find(child => child.value == 'FINISH')
+                    }
+                    const target = transitionCell.children.find(child => child.value == 'Step')
+                    graph.insertEdge(parent, null, '', source, target)
+                    handleBlockGeometry(transitionCell)
+                    prevStep = transitionCell
+                    scriptTree[key].forEach((code) => {
+                        const devices = code.match(/([A-Z]\w*\.\w+)/g)
+                        if(code.indexOf('if') !== -1) side = 'true'
+                        if(code.indexOf('else') !== -1) side = 'false'
+                        if(devices) {
+                            devices.forEach(device => {
+                                const afterDot = device.split('.')
+                                const prototype = generateCell(graph, device)
+                                const cell = graph.importCells([prototype])[0]
+                                const source = cell.children.find(child => child.value == afterDot[1])
+                                const target = transitionCell.children.find(child => (!child.edges.length && child.value !== 'Step'))
+                                graph.insertEdge(parent, null, '', source, target)
+                                handleCellGeometry(cell)
+                            })
+                        }
+                        if(side) {
+                            if(code.indexOf('this.exit') !== -1) {
+                                const endPrototype = generateCell(graph, 'exit');
+                                const endCell = graph.importCells([endPrototype])[0];
+                                const source = transitionCell.children.find(child => child.value === side)
+                                const target =  endCell.children[0]
+                                graph.insertEdge(parent, null, '', source, target)
+                                handleCellGeometry(endCell, true)
+                            }
+                            if(code.indexOf('this.step') !== -1) {
+                                transitionSide = side
+                            }
+                        }
                     })
                 }
-            })
+            }
             _init = false;
             handleGraphChange()
         })
