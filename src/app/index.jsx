@@ -549,37 +549,41 @@ export default function App () {
                         if(prevStep.value == 'start') source = prevStep.children[0]
                         if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
                     }
-                    const target = transitionCell.children.find(child => child.value == 'Step')
-                    graph.insertEdge(parent, null, '', source, target)
+                    if(source) {
+                        const target = transitionCell.children.find(child => child.value == 'Step')
+                        graph.insertEdge(parent, null, '', source, target)
+                    }
                     handleBlockGeometry(transitionCell, false, 100)
                     prevStep = transitionCell
                     scriptTree[key].forEach(code => {
-                        const devices = code.match(/(\w+\.\w+)\s([!=<>]+)\s\d+/g)
-                        const operation = code.match(/(&&|\|\|)/);
+                        const devices = code.match(/(\w+\.\w+)\s([!=<>]+)\s\d+/g) //Ищет в коде логическую последовательность двух операндов и операции
+                        const operation = code.match(/(&&|\|\|)/); //Ищет в коде главную логическую операцию
                         let firstPart = '';
                         let secondPart = '';
+                        // Определение где в каком блоке находиться текущаяя строка кода
                         if(code.indexOf('if') !== -1) side = 'true'
                         if(code.indexOf('else') !== -1) side = 'false'
+                        // Создание ячеек для устройств
                         if(devices) {
                             devices.forEach(device => {
+                                //Разбитие найденой логической пары на [операнд1, операция, операнд2]
                                 const pairs = device.split(' ');
-                                pairs.forEach((el, idx) => {
-                                    if(el.match(/[A-Z]/)) {
-                                        const afterDot = el.split('.')
-                                        const prototype = generateCell(graph, el)
-                                        const cell = graph.importCells([prototype])[0]
-                                        const source = cell.children.find(child => child.value == afterDot[1])
-                                        const target = transitionCell.children.find(child=> (!child.edges.length && child.value !== 'Step' && child.geometry.x == 0))
-                                        const str = target.value + pairs[idx + 1] + pairs[idx + 2]
-                                        !firstPart ? firstPart = str : secondPart = str
-                                        graph.insertEdge(parent, null, '', source, target)
-                                        handleCellGeometry(cell, false, 350)
-                                    }
-                                }) 
+                                const afterDot = pairs[0].split('.')
+                                const prototype = generateCell(graph, pairs[0])
+                                const cell = graph.importCells([prototype])[0]
+                                const source = cell.children.find(child => child.value == afterDot[1])
+                                const target = transitionCell.children.find(child=> (!child.edges.length && child.value !== 'Step' && child.geometry.x == 0))
+                                // Создание названия ячейки условия
+                                const str = target.value + pairs[1] + pairs[2]
+                                !firstPart ? firstPart = str : secondPart = str
+                                graph.insertEdge(parent, null, '', source, target)
+                                handleCellGeometry(cell, false, 350)
                             })
+                            // Установка названия ячейки условия
                             operation ? transitionCell.value = `${firstPart} ${operation[0]} ${secondPart}` : transitionCell.value = firstPart
                         }
                         if(side) {
+                            // Обработка ячейки выхода из сценария
                             if(code.indexOf('this.exit') !== -1) {
                                 const endPrototype = generateCell(graph, 'exit');
                                 const endCell = graph.importCells([endPrototype])[0];
@@ -588,6 +592,7 @@ export default function App () {
                                 graph.insertEdge(parent, null, '', source, target)
                                 handleCellGeometry(endCell, true, 60)
                             }
+                            // Обработка ячейки следующего шага
                             if(code.indexOf('this.step') !== -1) {
                                 transitionSide = side
                             }
