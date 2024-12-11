@@ -227,7 +227,7 @@ export default function App () {
             if (!cell.isCollapsed() && geometry != null && (geometry.offset == null || geometry.offset.x == 0 && geometry.offset.y == 0) && cell.isVertex() && geometry.width >= 2) {
                 const style = this.getCellStyle(cell);
                 const fontSize = style.fontSize || constants.DEFAULT_FONTSIZE;
-                const max = geometry.width / (fontSize * 0.625);
+                const max = (geometry.width - 20) / (fontSize * 0.625);
                 if (max < label.length) {
                     return `${label.substring(0, max)}...`;
                 }
@@ -440,11 +440,12 @@ export default function App () {
         // TP
         addCellImage(graph,toolbar,'/TP.svg', 100, 40, 'TP',  {editable: true});
 
+        // Преобразование пошагового сценария в граф
         const parent = graph.getDefaultParent();
         const initialX = 10; 
         const initialY = 400;
         const offsetX = 100;
-        const offsetY = 120;
+        const offsetY = 20;
         const blockPaddingX = 200;
         const blockPaddingY = 180;
         const blockOffsetX = 400;
@@ -453,38 +454,41 @@ export default function App () {
         let currentBlockX = initialX;
         let currentBlockY = initialY
         console.log(scriptTree)
-        const handleBlockGeometry = (cell, offsetX) => {
+        const handleBlockGeometry = (cell, offsetX, Y = 0, X = 0) => {
                 const geometry = cell.getGeometry();
-                geometry.x = currentBlockX
-                geometry.y = currentBlockY
+                geometry.x = X + currentBlockX
+                geometry.y = Y + currentBlockY
                 currentX = currentBlockX - blockPaddingX
                 currentY = currentBlockY - blockPaddingY
                 cell.setGeometry(geometry)
                 currentBlockX += offsetX || blockOffsetX;
                 currentBlockY = initialY
         }
-        const handleCellGeometry = (cell, rightSide) => {
+        const handleCellGeometry = (cell, rightSide, Y = 0, X = 0, absolute) => {
             const geometry = cell.getGeometry();
-            geometry.x = rightSide ? currentX + 400 : currentX + 50;
-            geometry.y = currentY;
+            const height = geometry.height
+            geometry.x = X + (rightSide ? currentX + 400 : currentX + 50);
+            geometry.y = absolute ? Y : Y + currentY;
             cell.setGeometry(geometry)
-            currentY += offsetY;
+            currentY += (height + offsetY);
         }
         graph.batchUpdate(() => {
             const keys = Object.keys(scriptTree)
             let prevStep = null
             let transitionSide = null
             for(const key of keys) {
+                // Обработка стартовой ячейки
                 if(key.indexOf('start') !== -1) {
                     const startPrototype = generateCell(graph, key);
                     const startCell = graph.importCells([startPrototype])[0];
                     handleBlockGeometry(startCell, offsetX)
                     prevStep = startCell
                 }
+                // Обработка ячейки шага
                 if(key.indexOf('step') !== -1) {
                     const stepPrototype = generateCell(graph, key)
                     const stepCell = graph.importCells([stepPrototype])[0];
-                    let source;
+                    let source = null;
                     if(prevStep) {
                         if(prevStep.value == 'start') source = prevStep.children[0]
                         if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
@@ -493,8 +497,10 @@ export default function App () {
                             transitionSide = null   
                         }
                     }
-                    const target = stepCell.children.find(child => child.value == 'BEGIN')
-                    graph.insertEdge(parent, null, '', source, target)
+                    if(source) {
+                        const target = stepCell.children.find(child => child.value == 'BEGIN')
+                        graph.insertEdge(parent, null, '', source, target)
+                    }
                     handleBlockGeometry(stepCell)
                     prevStep = stepCell
                     const devices = [];
@@ -502,44 +508,76 @@ export default function App () {
                         const device = code.match(/const\s+([A-Z]\w+_\d+)/)
                         if(device) {
                             const devicePrototype = generateCell(graph, device[1])
-                            const deviceCell = graph.importCells([devicePrototype])[0]
+                            const deviceCell = graph.importCells([devicePrototype])[0];
+                            const source = stepCell.children.find((child) => (!child.edges.length && child.geometry.x == 1))
+                            const target = deviceCell.children.find(child => child.value == 'step')
+                            graph.insertEdge(parent, null, '', source, target)
                             handleCellGeometry(deviceCell, true)
                             devices.push(deviceCell)
                         }
-                        if(devices.length && code.indexOf('this')!== -1 ) {
-                            // if(devices.findIndex((device) => device.value.indexOf))
+                        if(devices.length && code.indexOf('this') === -1 ) {
+                            const deviceIdx = devices.findIndex(device => {
+                                return code.indexOf(device.value) !== - 1
+                            })
+                             if(deviceIdx !== -1) {
+                                const deviceCall = code.match(/([A-Z]\w*\.\w+)/);
+                                if(deviceCall) {
+                                    const method = deviceCall[0].split('.')[1];
+                                    const execPrototype = generateCell(graph, 'exec');
+                                    const execCell = graph.importCells([execPrototype])[0];
+                                    let childIdx = 0;
+                                    const source = devices[deviceIdx].children.find((child, idx) =>{
+                                        childIdx = idx + 1;
+                                        return child.value == method.replace('set', '').toLowerCase()
+                                    })
+                                    const target = execCell.children[0]
+                                    graph.insertEdge(parent, null, '', source, target)
+                                    const Y = (devices[deviceIdx].geometry.y - 60) + (childIdx * 20)
+                                    handleCellGeometry(execCell, true, Y, 150, true)
+                                }
+                             }
                         }
                     })
-                    
                 }
+                // Обработка ячейки условия
                 if(key.indexOf('transition') !== -1) {
                     let side = null;
-                    const transitionPrototype = generateCell(graph, key)
+                    let source = null;
+                    const transitionPrototype = generateCell(graph, key, '', key)
                     const transitionCell = graph.importCells([transitionPrototype])[0];
-                    let source;
-                    if(prevStep && prevStep.value == 'start') {
-                        source = prevStep.children[0]
-                    } else if(prevStep && prevStep.value.indexOf('step') !== -1) {
-                        source = prevStep.children.find(child => child.value == 'FINISH')
+                    if(prevStep) {
+                        if(prevStep.value == 'start') source = prevStep.children[0]
+                        if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
                     }
                     const target = transitionCell.children.find(child => child.value == 'Step')
                     graph.insertEdge(parent, null, '', source, target)
-                    handleBlockGeometry(transitionCell)
+                    handleBlockGeometry(transitionCell, false, 100)
                     prevStep = transitionCell
-                    scriptTree[key].forEach((code) => {
-                        const devices = code.match(/([A-Z]\w*\.\w+)/g)
+                    scriptTree[key].forEach(code => {
+                        const devices = code.match(/(\w+\.\w+)\s([!=<>]+)\s\d+/g)
+                        const operation = code.match(/(&&|\|\|)/);
+                        let firstPart = '';
+                        let secondPart = '';
                         if(code.indexOf('if') !== -1) side = 'true'
                         if(code.indexOf('else') !== -1) side = 'false'
                         if(devices) {
                             devices.forEach(device => {
-                                const afterDot = device.split('.')
-                                const prototype = generateCell(graph, device)
-                                const cell = graph.importCells([prototype])[0]
-                                const source = cell.children.find(child => child.value == afterDot[1])
-                                const target = transitionCell.children.find(child => (!child.edges.length && child.value !== 'Step'))
-                                graph.insertEdge(parent, null, '', source, target)
-                                handleCellGeometry(cell)
+                                const pairs = device.split(' ');
+                                pairs.forEach((el, idx) => {
+                                    if(el.match(/[A-Z]/)) {
+                                        const afterDot = el.split('.')
+                                        const prototype = generateCell(graph, el)
+                                        const cell = graph.importCells([prototype])[0]
+                                        const source = cell.children.find(child => child.value == afterDot[1])
+                                        const target = transitionCell.children.find(child=> (!child.edges.length && child.value !== 'Step' && child.geometry.x == 0))
+                                        const str = target.value + pairs[idx + 1] + pairs[idx + 2]
+                                        !firstPart ? firstPart = str : secondPart = str
+                                        graph.insertEdge(parent, null, '', source, target)
+                                        handleCellGeometry(cell, false, 350)
+                                    }
+                                }) 
                             })
+                            operation ? transitionCell.value = `${firstPart} ${operation[0]} ${secondPart}` : transitionCell.value = firstPart
                         }
                         if(side) {
                             if(code.indexOf('this.exit') !== -1) {
@@ -548,7 +586,7 @@ export default function App () {
                                 const source = transitionCell.children.find(child => child.value === side)
                                 const target =  endCell.children[0]
                                 graph.insertEdge(parent, null, '', source, target)
-                                handleCellGeometry(endCell, true)
+                                handleCellGeometry(endCell, true, 60)
                             }
                             if(code.indexOf('this.step') !== -1) {
                                 transitionSide = side

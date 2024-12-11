@@ -9,8 +9,13 @@ const TestScript = {
     step1() {
     // step1. Тест
     this.setStep("step1")
-    const  Valve_001 = Device("Valve_001");
+    const Valve_001 = Device("Valve_001");
+    const Valve_002 = Device("Valve_002");
     Valve_001.off();
+    Valve_001.toggle();
+    Valve_001.on();
+    Valve_002.on();
+    Valve_002.setState();
     this.mainlog('Text2');
     this.info("undefined","undefined",'Text3');
     this.transition1();
