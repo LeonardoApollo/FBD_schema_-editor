@@ -442,24 +442,27 @@ export default function App () {
 
         // Преобразование пошагового сценария в граф
         const parent = graph.getDefaultParent();
+        const portGap = 20;
         const initialX = 10; 
         const initialY = 400;
         const offsetX = 100;
-        const offsetY = 20;
-        const blockPaddingX = 200;
-        const blockPaddingY = 180;
-        const blockOffsetX = 400;
+        const offsetY = 30;
+        const blockPaddingX = 120;
+        const blockPaddingY = 280;
+        const blockOffsetX = 600;
         let currentX = initialX;
         let currentY = initialY;
         let currentBlockX = initialX;
-        let currentBlockY = initialY
+        let currentBlockY = initialY;
+        let deviceY = initialY;
         console.log(scriptTree)
         const handleBlockGeometry = (cell, offsetX, Y = 0, X = 0) => {
                 const geometry = cell.getGeometry();
                 geometry.x = X + currentBlockX
                 geometry.y = Y + currentBlockY
                 currentX = currentBlockX - blockPaddingX
-                currentY = currentBlockY - blockPaddingY
+                currentY = currentBlockY - blockPaddingY + 200
+                deviceY = currentBlockY - blockPaddingY
                 cell.setGeometry(geometry)
                 currentBlockX += offsetX || blockOffsetX;
                 currentBlockY = initialY
@@ -470,7 +473,29 @@ export default function App () {
             geometry.x = X + (rightSide ? currentX + 400 : currentX + 50);
             geometry.y = absolute ? Y : Y + currentY;
             cell.setGeometry(geometry)
-            currentY += (height + offsetY);
+            if(!absolute) {
+                currentY += (height + offsetY);
+            }
+        }
+        const handleDeviceGeometry = (cell, rightSide, Y=0, X=0, stepY, stepHeiht) => {
+            const geometry = cell.getGeometry();
+            const height = geometry.height
+            const topStep = stepY;
+            const bottomStep = stepY + stepHeiht;
+            const topGeo = Y + deviceY;
+            const bottomGeo = topGeo + height;
+            geometry.x = X + (rightSide ? currentX + 400 : currentX + 50);
+            if(bottomGeo > topStep && bottomStep > bottomGeo) {
+                geometry.y = Y + bottomStep + offsetY
+                deviceY = bottomStep + height + (offsetY * 2)
+            } else {
+                geometry.y = topGeo;
+                deviceY += (height + offsetY);
+            }
+            cell.setGeometry(geometry)
+        }
+        const isChildAvailable = (child, side) => {
+            return !child.edges.length && (side === 'right' ? child.geometry.x == 1 : child.geometry.x == 0)
         }
         graph.batchUpdate(() => {
             const keys = Object.keys(scriptTree)
@@ -480,14 +505,14 @@ export default function App () {
                 // Обработка стартовой ячейки
                 if(key.indexOf('start') !== -1) {
                     const startPrototype = generateCell(graph, key);
-                    const startCell = graph.importCells([startPrototype])[0];
+                    const [startCell] = graph.importCells([startPrototype]);
                     handleBlockGeometry(startCell, offsetX)
                     prevStep = startCell
                 }
                 // Обработка ячейки шага
                 if(key.indexOf('step') !== -1) {
                     const stepPrototype = generateCell(graph, key)
-                    const stepCell = graph.importCells([stepPrototype])[0];
+                    const [stepCell] = graph.importCells([stepPrototype]);
                     let source = null;
                     if(prevStep) {
                         if(prevStep.value == 'start') source = prevStep.children[0]
@@ -504,38 +529,112 @@ export default function App () {
                     handleBlockGeometry(stepCell)
                     prevStep = stepCell
                     const devices = [];
+                    const execHash = {};
+                    let prevDeviceIdx = -1;
+                    let Ymod = 0
                     scriptTree[key].forEach(code => {
+                        // Обработка mainlog
+                        if(code.indexOf('this.mainlog') !== -1) {
+                            const text = code.match(/\('([^']+)'\)/);
+                            const mainlogPrototype = generateCell(graph, 'mainlog', text[1], 'mainlog')
+                            const [mainlogCell] = graph.importCells([mainlogPrototype]);
+                            const source = stepCell.children.find(child => isChildAvailable(child, 'right'))
+                            const target = mainlogCell.children[1]
+                            graph.insertEdge(parent, null, '', source, target)
+                            handleCellGeometry(mainlogCell, true)
+                            return
+                        }
+                        // Обработка info
+                        if(code.indexOf('this.info') !== -1) {
+                            // Ищет параметры передаваемые в метод info
+                            const [param1, param2, param3] = code.match(/['"]([^'"]+)['"]/g);
+                            const infoPrototype = generateCell(graph, 'info', param3.replace(/'/g, ''), 'info');
+                            const [infoCell] = graph.importCells([infoPrototype]);
+                            const target = infoCell.children.find(child => child.value == 'step');
+                            const source = stepCell.children.find(child => isChildAvailable(child, 'right'));
+                            graph.insertEdge(parent, null, '', source, target)
+                            let childIdx = 0;
+                            handleCellGeometry(infoCell, true)
+                            if(param1 && param1 !== "\"undefined\"" && param1 !== "\"null\"") {
+                                const channelPrototype = generateCell(graph, 'channel', param1, 'channel')
+                                const [channelCell] = graph.importCells([channelPrototype]);
+                                const source = channelCell.children[1];
+                                const target = infoCell.children.find((child, idx) => {
+                                    childIdx = idx
+                                    return child.value == 'channel'
+                                })
+                                graph.insertEdge(parent, null, '', source, target)
+                                const Y = (infoCell.geometry.y - 20) + (childIdx * portGap)
+                                handleCellGeometry(channelCell, false, Y, 200, true)
+                            }
+                            if(param2 && param2 !== "\"undefined\"" && param2 !== "\"null\"") {
+                                const recieverPrototype = generateCell(graph, 'receiver', param2, 'receiver')
+                                const [recieverCell] = graph.importCells([recieverPrototype]);
+                                const source = recieverCell.children[1];
+                                const target = infoCell.children.find((child, idx) => {
+                                    childIdx = idx
+                                    return child.value == 'receiver'
+                                })
+                                graph.insertEdge(parent, null, '', source, target)
+                                const Y = (infoCell.geometry.y) + (childIdx * portGap)
+                                handleCellGeometry(recieverCell, false, Y, 200, true)
+                            }
+                            return
+                        }
+                        // Обработка устройств
                         const device = code.match(/const\s+([A-Z]\w+_\d+)/)
                         if(device) {
                             const devicePrototype = generateCell(graph, device[1])
-                            const deviceCell = graph.importCells([devicePrototype])[0];
-                            const source = stepCell.children.find((child) => (!child.edges.length && child.geometry.x == 1))
-                            const target = deviceCell.children.find(child => child.value == 'step')
-                            graph.insertEdge(parent, null, '', source, target)
-                            handleCellGeometry(deviceCell, true)
+                            const [deviceCell] = graph.importCells([devicePrototype]);
+                            handleDeviceGeometry(deviceCell, true, 0, -280, stepCell.geometry.y, stepCell.geometry.height)
                             devices.push(deviceCell)
                         }
                         if(devices.length && code.indexOf('this') === -1 ) {
                             const deviceIdx = devices.findIndex(device => {
                                 return code.indexOf(device.value) !== - 1
                             })
-                             if(deviceIdx !== -1) {
+                            if(deviceIdx !== -1) {
                                 const deviceCall = code.match(/([A-Z]\w*\.\w+)/);
                                 if(deviceCall) {
-                                    const method = deviceCall[0].split('.')[1];
-                                    const execPrototype = generateCell(graph, 'exec');
-                                    const execCell = graph.importCells([execPrototype])[0];
+                                    const [_,method] = deviceCall[0].split('.');
+                                    const val = code.match(/\(([^()]+)\)/);
+                                    const execPrototype = generateCell(graph, 'exec', val ? val[1] : 'exec', null);
+                                    const [execCell] = graph.importCells([execPrototype]);
                                     let childIdx = 0;
-                                    const source = devices[deviceIdx].children.find((child, idx) =>{
+                                    const source1 = devices[deviceIdx].children.find((child, idx) =>{
                                         childIdx = idx + 1;
                                         return child.value == method.replace('set', '').toLowerCase()
                                     })
-                                    const target = execCell.children[0]
-                                    graph.insertEdge(parent, null, '', source, target)
-                                    const Y = (devices[deviceIdx].geometry.y - 60) + (childIdx * 20)
-                                    handleCellGeometry(execCell, true, Y, 150, true)
+                                    const source2 = stepCell.children.find(child => isChildAvailable(child, 'right'))
+                                    const target1 = execCell.children[0]
+                                    const target2 = execCell.children[1]
+                                    graph.insertEdge(parent, null, '', source1, target1)
+                                    graph.insertEdge(parent, null, '', source2, target2)
+                                    let Y = ((devices[deviceIdx].geometry.y - 100) - execCell.geometry.height + (childIdx * portGap)) + (childIdx * portGap)
+                                    const height = Y + execCell.geometry.height;
+                                    if(prevDeviceIdx !== -1 && prevDeviceIdx !== deviceIdx) {
+                                        if(Ymod) Ymod = 0
+                                        Object.values(execHash).forEach(([top, bottom]) => {
+                                            if(bottom - Y < 40 && bottom - Y > -40) {
+                                                Ymod = 40
+                                            }
+                                        })
+                                    }
+                                    handleCellGeometry(execCell, true, Y + Ymod, -100, true)
+                                    if(!execHash[deviceIdx]) {
+                                        execHash[deviceIdx] = [Y, height];
+                                    } else {
+                                        const [top, bottom] = execHash[deviceIdx];
+                                        if(bottom < height) {
+                                            execHash[deviceIdx] = [top, height];
+                                        }
+                                        if(top > Y) {
+                                            execHash[deviceIdx] = [Y, bottom]
+                                        }
+                                    }
+                                    prevDeviceIdx = deviceIdx
                                 }
-                             }
+                            }
                         }
                     })
                 }
@@ -544,7 +643,7 @@ export default function App () {
                     let side = null;
                     let source = null;
                     const transitionPrototype = generateCell(graph, key, '', key)
-                    const transitionCell = graph.importCells([transitionPrototype])[0];
+                    const [transitionCell] = graph.importCells([transitionPrototype]);
                     if(prevStep) {
                         if(prevStep.value == 'start') source = prevStep.children[0]
                         if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
@@ -560,24 +659,33 @@ export default function App () {
                         const operation = code.match(/(&&|\|\|)/); //Ищет в коде главную логическую операцию
                         let firstPart = '';
                         let secondPart = '';
-                        // Определение где в каком блоке находиться текущаяя строка кода
+                        let deviceCell = null;
+                        // Определение в каком блоке находиться текущаяя строка кода
                         if(code.indexOf('if') !== -1) side = 'true'
                         if(code.indexOf('else') !== -1) side = 'false'
                         // Создание ячеек для устройств
                         if(devices) {
                             devices.forEach(device => {
                                 //Разбитие найденой логической пары на [операнд1, операция, операнд2]
-                                const pairs = device.split(' ');
-                                const afterDot = pairs[0].split('.')
-                                const prototype = generateCell(graph, pairs[0])
-                                const cell = graph.importCells([prototype])[0]
-                                const source = cell.children.find(child => child.value == afterDot[1])
-                                const target = transitionCell.children.find(child=> (!child.edges.length && child.value !== 'Step' && child.geometry.x == 0))
+                                const [op1, op, op2] = device.split(' ');
+                                const [beforeDot,afterDot] = op1.split('.');
+                                let source;
+                                let cell = deviceCell;
+                                if(deviceCell && deviceCell.value === beforeDot) {
+                                    source = deviceCell.children.find(child => child.value == afterDot)
+                                } else {
+                                    const prototype = generateCell(graph, beforeDot)
+                                    const [devCell] = graph.importCells([prototype])
+                                    source = devCell.children.find(child => child.value == afterDot)
+                                    cell = devCell
+                                    deviceCell = devCell
+                                }
+                                const target = transitionCell.children.find(child=> (isChildAvailable(child, 'left') && child.value !== 'Step'))
                                 // Создание названия ячейки условия
-                                const str = target.value + pairs[1] + pairs[2]
+                                const str = target.value + op + op2
                                 !firstPart ? firstPart = str : secondPart = str
                                 graph.insertEdge(parent, null, '', source, target)
-                                handleCellGeometry(cell, false, 350)
+                                handleCellGeometry(cell, false, 120, -100)
                             })
                             // Установка названия ячейки условия
                             operation ? transitionCell.value = `${firstPart} ${operation[0]} ${secondPart}` : transitionCell.value = firstPart
@@ -586,11 +694,12 @@ export default function App () {
                             // Обработка ячейки выхода из сценария
                             if(code.indexOf('this.exit') !== -1) {
                                 const endPrototype = generateCell(graph, 'exit');
-                                const endCell = graph.importCells([endPrototype])[0];
+                                const [endCell] = graph.importCells([endPrototype]);
                                 const source = transitionCell.children.find(child => child.value === side)
                                 const target =  endCell.children[0]
                                 graph.insertEdge(parent, null, '', source, target)
-                                handleCellGeometry(endCell, true, 60)
+                                handleCellGeometry(endCell, true, -60)
+                                return
                             }
                             // Обработка ячейки следующего шага
                             if(code.indexOf('this.step') !== -1) {
