@@ -446,10 +446,11 @@ export default function App () {
         const initialX = 10; 
         const initialY = 400;
         const offsetX = 100;
-        const offsetY = 30;
+        const offsetY = 20;
         const blockPaddingX = 120;
         const blockPaddingY = 280;
-        const blockOffsetX = 600;
+        const blockOffsetX = 650;
+        const blockOffsetY = 350;
         let currentX = initialX;
         let currentY = initialY;
         let currentBlockX = initialX;
@@ -465,7 +466,6 @@ export default function App () {
                 deviceY = currentBlockY - blockPaddingY
                 cell.setGeometry(geometry)
                 currentBlockX += offsetX || blockOffsetX;
-                currentBlockY = initialY
         }
         const handleCellGeometry = (cell, rightSide, Y = 0, X = 0, absolute) => {
             const geometry = cell.getGeometry();
@@ -494,8 +494,8 @@ export default function App () {
             }
             cell.setGeometry(geometry)
         }
-        const createCell = (graph, type, title = '', subtitle = null) => {
-            const cellPrototype = generateCell(graph, type, title, subtitle);
+        const createCell = (graph, type, title = '', subtitle = null, leftports = 0) => {
+            const cellPrototype = generateCell(graph, type, title, subtitle, leftports);
             const [cell] = graph.importCells([cellPrototype]);
             return cell
         }
@@ -522,8 +522,9 @@ export default function App () {
                         if(prevStep.value == 'start') source = prevStep.children[0]
                         if(prevStep.value.indexOf('step') !== -1 && stepNum == key) source = prevStep.children.find(child => child.value == 'FINISH')
                         if(transitionHash[key]) {
+                            if(transitionHash[key].side === 'false') currentBlockY += blockOffsetY
                             source = transitionHash[key].cell.children.find(child => child.value === transitionHash[key].side)
-                            transitionHash[key] = null  
+                            transitionHash[key] = null 
                         }
                     }
                     if(source) {
@@ -549,7 +550,7 @@ export default function App () {
                             const source = stepCell.children.find(child => child.value == 'FINISH')
                             const target = exitCell.children[0];
                             graph.insertEdge(parent, null, '', source, target)
-                            handleCellGeometry(exitCell, true)
+                            handleCellGeometry(exitCell, true, 180, 0)
                         }
                         // Обработка mainlog
                         if(code.indexOf('this.mainlog') !== -1) {
@@ -558,7 +559,7 @@ export default function App () {
                             const source = stepCell.children.find(child => isChildAvailable(child, 'right'))
                             const target = mainlogCell.children[1]
                             graph.insertEdge(parent, null, '', source, target)
-                            handleCellGeometry(mainlogCell, true)
+                            handleCellGeometry(mainlogCell, true, 0, 50)
                             return
                         }
                         // Обработка info
@@ -570,7 +571,7 @@ export default function App () {
                             const source = stepCell.children.find(child => isChildAvailable(child, 'right'));
                             graph.insertEdge(parent, null, '', source, target)
                             let childIdx = 0;
-                            handleCellGeometry(infoCell, true)
+                            handleCellGeometry(infoCell, true, 0, 50)
                             if(param1 && param1 !== "\"undefined\"" && param1 !== "\"null\"") {
                                 const channelCell = createCell(graph, 'channel', param1, 'channel')
                                 const source = channelCell.children[1];
@@ -654,7 +655,15 @@ export default function App () {
                 if(key.indexOf('transition') !== -1) {
                     let side = null;
                     let source = null;
-                    const transitionCell = createCell(graph, key, '', key)
+                    let devices = null; 
+                    for(const code of scriptTree[key]) {
+                        const match = code.match((/(\w+\.\w+)\s([!=<>]+)\s\d+/g)) //Ищет в коде логическую последовательность двух операндов и операции
+                        if(match) {
+                            devices = match
+                            break
+                        }
+                    }
+                    const transitionCell = createCell(graph, key, '', key, devices.length)
                     if(prevStep) {
                         if(prevStep.value == 'start') source = prevStep.children[0]
                         if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
@@ -663,19 +672,17 @@ export default function App () {
                         const target = transitionCell.children.find(child => child.value == 'Step')
                         graph.insertEdge(parent, null, '', source, target)
                     }
-                    handleBlockGeometry(transitionCell, false, 100)
+                    handleBlockGeometry(transitionCell, false, blockOffsetY)
                     prevStep = transitionCell
                     scriptTree[key].forEach(code => {
-                        const devices = code.match(/(\w+\.\w+)\s([!=<>]+)\s\d+/g) //Ищет в коде логическую последовательность двух операндов и операции
-                        const operation = code.match(/(&&|\|\|)/); //Ищет в коде главную логическую операцию
-                        let firstPart = '';
-                        let secondPart = '';
+                        const operations = code.match(/(&&|\|\|)/g); //Ищет в коде главную логическую операцию
+                        const parts = []
                         let deviceCell = null;
                         // Определение в каком блоке находиться текущаяя строка кода
                         if(code.indexOf('if') !== -1) side = 'true'
                         if(code.indexOf('else') !== -1) side = 'false'
                         // Создание ячеек для устройств
-                        if(devices) {
+                        if(devices && code.indexOf('if') !== -1) {
                             devices.forEach(device => {
                                 //Разбитие найденой логической пары на [операнд1, операция, операнд2]
                                 const [op1, op, op2] = device.split(' ');
@@ -689,16 +696,30 @@ export default function App () {
                                     source = devCell.children.find(child => child.value == afterDot)
                                     cell = devCell
                                     deviceCell = devCell
+                                    handleCellGeometry(cell, false, transitionCell.geometry.y - 280, -100)
                                 }
                                 const target = transitionCell.children.find(child=> (isChildAvailable(child, 'left') && child.value !== 'Step'))
                                 // Создание названия ячейки условия
                                 const str = target.value + op + op2
-                                !firstPart ? firstPart = str : secondPart = str
+                                parts.push(str)
                                 graph.insertEdge(parent, null, '', source, target)
-                                handleCellGeometry(cell, false, 120, -100)
                             })
                             // Установка названия ячейки условия
-                            operation ? transitionCell.value = `${firstPart} ${operation[0]} ${secondPart}` : transitionCell.value = firstPart
+                           if(operations) {
+                                let transitionName = parts[0] + ' '
+                                let opCount = 0;
+                                for(let i = 1; i < parts.length; i++) {
+                                    if(operations[opCount]) {
+                                        transitionName += ` ${operations[opCount]} ${parts[i]}`
+                                        opCount++
+                                    } else {
+                                        transitionName += ' ' + parts[i]
+                                    }
+                                }
+                                transitionCell.value = transitionName.trim()
+                           } else {
+                                transitionCell.value = parts[0]
+                           }
                         }
                         if(side) {
                             // Обработка ячейки выхода из сценария

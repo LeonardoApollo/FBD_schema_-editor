@@ -3,14 +3,18 @@ import generatePorts from "./generatePorts";
 
 const style1 = {editable: true}
 const style2 = {editable: false}
-export default function generateCell(graph,type, title, subtitle) {
+export default function generateCell(graph,type, title, subtitle, leftports) {
     let cell;
     if(type.indexOf('Valve') !== -1) {
         cell = generateFigure(graph, 110, 100, type, type, style2)
         generatePorts(graph, cell, 0, 5, { rightport1: 'state', rightport2: 'on', rightport3: 'off', rightport4: 'toggle', rightport5:'error'})
     } else if(type.indexOf('transition') !== -1) {
-        cell = generateFigure(graph, 160, 60, title, subtitle, style1)
-        generatePorts(graph, cell, 3, 2, {leftport1: 'Step', leftport2: 'IN1', leftport3: 'IN2',  rightport1: 'true', rightport2: 'false'})
+        cell = generateFigure(graph, 160, (leftports + 1) * 20, title, subtitle, style1)
+        const portsNames = {leftport1: 'Step', rightport1: 'true', rightport2: 'false'}
+        for(let i = 1; i <= leftports; i++) {
+            portsNames[`leftport${i + 1}`] = `IN${i}`
+        }
+        generatePorts(graph, cell, leftports + 1, 2, portsNames)
     } else if (type.indexOf('step') !== -1) {
         cell = generateFigure(graph, 110, 200, type, type, style2)
         generatePorts(graph, cell, 1, 10, {leftport1: 'BEGIN', rightport1: 'CMD1', rightport2: 'CMD2', rightport3: 'CMD3', rightport4: 'CMD4', rightport5: 'CMD5', rightport6: 'CMD6', rightport7: 'CMD7', rightport8: 'CMD8', rightport9: 'CMD9', rightport10: 'FINISH'})
