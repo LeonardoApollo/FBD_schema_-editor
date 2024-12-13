@@ -494,32 +494,36 @@ export default function App () {
             }
             cell.setGeometry(geometry)
         }
+        const createCell = (graph, type, title = '', subtitle = null) => {
+            const cellPrototype = generateCell(graph, type, title, subtitle);
+            const [cell] = graph.importCells([cellPrototype]);
+            return cell
+        }
         const isChildAvailable = (child, side) => {
             return !child.edges.length && (side === 'right' ? child.geometry.x == 1 : child.geometry.x == 0)
         }
         graph.batchUpdate(() => {
             const keys = Object.keys(scriptTree)
             let prevStep = null
-            let transitionSide = null
+            let transitionHash = {};
+            let stepNum = null
             for(const key of keys) {
                 // Обработка стартовой ячейки
                 if(key.indexOf('start') !== -1) {
-                    const startPrototype = generateCell(graph, key);
-                    const [startCell] = graph.importCells([startPrototype]);
+                    const startCell = createCell(graph, key)
                     handleBlockGeometry(startCell, offsetX)
                     prevStep = startCell
                 }
                 // Обработка ячейки шага
                 if(key.indexOf('step') !== -1) {
-                    const stepPrototype = generateCell(graph, key)
-                    const [stepCell] = graph.importCells([stepPrototype]);
+                    const stepCell = createCell(graph, key)
                     let source = null;
                     if(prevStep) {
                         if(prevStep.value == 'start') source = prevStep.children[0]
-                        if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
-                        if(transitionSide) {
-                            source = prevStep.children.find(child => child.value === transitionSide)
-                            transitionSide = null   
+                        if(prevStep.value.indexOf('step') !== -1 && stepNum == key) source = prevStep.children.find(child => child.value == 'FINISH')
+                        if(transitionHash[key]) {
+                            source = transitionHash[key].cell.children.find(child => child.value === transitionHash[key].side)
+                            transitionHash[key] = null  
                         }
                     }
                     if(source) {
@@ -533,11 +537,24 @@ export default function App () {
                     let prevDeviceIdx = -1;
                     let Ymod = 0
                     scriptTree[key].forEach(code => {
+                        // Обработка следующего шага
+                        if(code.indexOf('this.step') !== -1) {
+                            const step = code.match(/step\d+/);
+                            stepNum = step[0]
+                        }
+                        // Обработка выхода
+                        if(code.indexOf('this.exit') !== -1) {
+                            stepNum == null
+                            const exitCell = createCell(graph, 'exit')
+                            const source = stepCell.children.find(child => child.value == 'FINISH')
+                            const target = exitCell.children[0];
+                            graph.insertEdge(parent, null, '', source, target)
+                            handleCellGeometry(exitCell, true)
+                        }
                         // Обработка mainlog
                         if(code.indexOf('this.mainlog') !== -1) {
                             const text = code.match(/\('([^']+)'\)/);
-                            const mainlogPrototype = generateCell(graph, 'mainlog', text[1], 'mainlog')
-                            const [mainlogCell] = graph.importCells([mainlogPrototype]);
+                            const mainlogCell = createCell(graph,'mainlog', text[1], 'mainlog');
                             const source = stepCell.children.find(child => isChildAvailable(child, 'right'))
                             const target = mainlogCell.children[1]
                             graph.insertEdge(parent, null, '', source, target)
@@ -548,16 +565,14 @@ export default function App () {
                         if(code.indexOf('this.info') !== -1) {
                             // Ищет параметры передаваемые в метод info
                             const [param1, param2, param3] = code.match(/['"]([^'"]+)['"]/g);
-                            const infoPrototype = generateCell(graph, 'info', param3.replace(/'/g, ''), 'info');
-                            const [infoCell] = graph.importCells([infoPrototype]);
+                            const infoCell = createCell(graph, 'info', param3.replace(/'/g, ''), 'info')
                             const target = infoCell.children.find(child => child.value == 'step');
                             const source = stepCell.children.find(child => isChildAvailable(child, 'right'));
                             graph.insertEdge(parent, null, '', source, target)
                             let childIdx = 0;
                             handleCellGeometry(infoCell, true)
                             if(param1 && param1 !== "\"undefined\"" && param1 !== "\"null\"") {
-                                const channelPrototype = generateCell(graph, 'channel', param1, 'channel')
-                                const [channelCell] = graph.importCells([channelPrototype]);
+                                const channelCell = createCell(graph, 'channel', param1, 'channel')
                                 const source = channelCell.children[1];
                                 const target = infoCell.children.find((child, idx) => {
                                     childIdx = idx
@@ -568,8 +583,7 @@ export default function App () {
                                 handleCellGeometry(channelCell, false, Y, 200, true)
                             }
                             if(param2 && param2 !== "\"undefined\"" && param2 !== "\"null\"") {
-                                const recieverPrototype = generateCell(graph, 'receiver', param2, 'receiver')
-                                const [recieverCell] = graph.importCells([recieverPrototype]);
+                                const recieverCell = createCell(graph, 'receiver', param2, 'receiver');
                                 const source = recieverCell.children[1];
                                 const target = infoCell.children.find((child, idx) => {
                                     childIdx = idx
@@ -584,8 +598,7 @@ export default function App () {
                         // Обработка устройств
                         const device = code.match(/const\s+([A-Z]\w+_\d+)/)
                         if(device) {
-                            const devicePrototype = generateCell(graph, device[1])
-                            const [deviceCell] = graph.importCells([devicePrototype]);
+                            const deviceCell = createCell(graph, device[1])
                             handleDeviceGeometry(deviceCell, true, 0, -280, stepCell.geometry.y, stepCell.geometry.height)
                             devices.push(deviceCell)
                         }
@@ -598,8 +611,7 @@ export default function App () {
                                 if(deviceCall) {
                                     const [_,method] = deviceCall[0].split('.');
                                     const val = code.match(/\(([^()]+)\)/);
-                                    const execPrototype = generateCell(graph, 'exec', val ? val[1] : 'exec', null);
-                                    const [execCell] = graph.importCells([execPrototype]);
+                                    const execCell = createCell(graph, 'exec', val ? `exec(${val[1]})` : 'exec')
                                     let childIdx = 0;
                                     const source1 = devices[deviceIdx].children.find((child, idx) =>{
                                         childIdx = idx + 1;
@@ -642,8 +654,7 @@ export default function App () {
                 if(key.indexOf('transition') !== -1) {
                     let side = null;
                     let source = null;
-                    const transitionPrototype = generateCell(graph, key, '', key)
-                    const [transitionCell] = graph.importCells([transitionPrototype]);
+                    const transitionCell = createCell(graph, key, '', key)
                     if(prevStep) {
                         if(prevStep.value == 'start') source = prevStep.children[0]
                         if(prevStep.value.indexOf('step') !== -1) source = prevStep.children.find(child => child.value == 'FINISH')
@@ -674,8 +685,7 @@ export default function App () {
                                 if(deviceCell && deviceCell.value === beforeDot) {
                                     source = deviceCell.children.find(child => child.value == afterDot)
                                 } else {
-                                    const prototype = generateCell(graph, beforeDot)
-                                    const [devCell] = graph.importCells([prototype])
+                                    const devCell = createCell(graph, beforeDot)
                                     source = devCell.children.find(child => child.value == afterDot)
                                     cell = devCell
                                     deviceCell = devCell
@@ -693,17 +703,17 @@ export default function App () {
                         if(side) {
                             // Обработка ячейки выхода из сценария
                             if(code.indexOf('this.exit') !== -1) {
-                                const endPrototype = generateCell(graph, 'exit');
-                                const [endCell] = graph.importCells([endPrototype]);
+                                const exitCell = createCell(graph, 'exit')
                                 const source = transitionCell.children.find(child => child.value === side)
-                                const target =  endCell.children[0]
+                                const target =  exitCell.children[0]
                                 graph.insertEdge(parent, null, '', source, target)
-                                handleCellGeometry(endCell, true, -60)
+                                handleCellGeometry(exitCell, true, -60)
                                 return
                             }
                             // Обработка ячейки следующего шага
                             if(code.indexOf('this.step') !== -1) {
-                                transitionSide = side
+                                const [step] = code.match(/step\d+/)
+                                transitionHash[step] = {cell: transitionCell, side}
                             }
                         }
                     })

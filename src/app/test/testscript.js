@@ -28,7 +28,7 @@ const TestScript = {
         this.step2();
     } else {
         // Условие НЕ выполнено
-        this.exit();
+        this.step4();
     }
     },
     step2() {
@@ -38,12 +38,12 @@ const TestScript = {
     FAN_002.off();
     this.mainlog('TExt2');
     this.info("undefined","undefined",'Text3');
-    this.exit();
+    this.step3()
     },
     step3() {
     // step3. Шаг 3
     this.setStep("step3")
-    this.step4();
+    this.exit();
     },
     step4() {
     // step4. Шаг 4
@@ -53,6 +53,7 @@ const TestScript = {
     step5() {
     // step5. Шаг 5
     this.setStep("step5")
+    this.exit();
     }
 }
 
