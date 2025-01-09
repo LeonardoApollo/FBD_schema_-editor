@@ -1,8 +1,21 @@
+import { Cell } from "@maxgraph/core";
 import generateFigure from "./generateFigure";
 import generatePorts from "./generatePorts";
 
 const style1 = {editable: true}
 const style2 = {editable: false}
+
+/**
+ * Генерирует ячейку в графе библиотеки mxGraph в зависимости от указанного типа.
+ *
+ * @param {mxGraph} graph - Экземпляр графа maxGraph, в который будет добавлена ячейка.
+ * @param {string} type - Тип ячейки, который определяет её внешний вид и порты.
+ * @param {string} title - Заголовок ячейки, отображаемый в её содержимом (может быть null).
+ * @param {string} subtitle - Подзаголовок ячейки, отображаемый в её содержимом (может быть null).
+ * @param {number} leftports - Количество левых портов, которые должны быть добавлены к ячейке.
+ * 
+ * @returns {Cell} Возвращает созданную ячейку (Cell), базируясь на переданном типе.
+ */
 export default function generateCell(graph,type, title, subtitle, leftports) {
     let cell;
     if(type.indexOf('Valve') !== -1) {

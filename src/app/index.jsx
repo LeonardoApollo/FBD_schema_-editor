@@ -17,7 +17,8 @@ import {
     CellEditorHandler, 
     constants, 
     GraphView, 
-    EdgeHandler
+    EdgeHandler,
+    Point
 } from '@maxgraph/core';
 import {useEffect, useRef, useState, useCallback} from 'react';
 import generatePorts from './utils/generatePorts';
@@ -26,6 +27,7 @@ import ConnectionPreview from './components/ConnectionPreview';
 import Dialog from './components/Dialog';
 import TestScript from './test/testscript';
 import generateCell from './utils/generateCell';
+import createEdgeWithOffset from './utils/createEdgeWithOffset';
 
 
 // Расширение стандартного метода ConnectionHandler.connect для валидации создания связей
@@ -167,7 +169,7 @@ export default function App () {
                 setCellsState(cells)
             }
         }
-
+        
         // Отвечает за огибание линиями ячеек
         EdgeHandler.prototype.snapToTerminals = true;
         ConnectionHandler.prototype.movePreviewAway = false;
@@ -248,6 +250,8 @@ export default function App () {
         style.fillColor = '#FFFFFF';
         style.labelBackgroundColor = '#FFFFFF'
         style.edgeStyle = 'orthogonalEdgeStyle'
+        style.entryX = 0;
+        style.entryDx = 0;
 
         const connectionHandler = graph.getPlugin('ConnectionHandler');
 
@@ -537,7 +541,9 @@ export default function App () {
                     const execHash = {};
                     let prevDeviceIdx = -1;
                     let Ymod = 0
-                    scriptTree[key].forEach(code => {
+                    let edgeOffset = 0;
+                    scriptTree[key].forEach((code, i) => {
+                        i % 5 !== 0 ? edgeOffset += 5 : edgeOffset = 0
                         // Обработка следующего шага
                         if(code.indexOf('this.step') !== -1) {
                             const step = code.match(/step\d+/);
@@ -558,7 +564,7 @@ export default function App () {
                             const mainlogCell = createCell(graph,'mainlog', text[1], 'mainlog');
                             const source = stepCell.children.find(child => isChildAvailable(child, 'right'))
                             const target = mainlogCell.children[1]
-                            graph.insertEdge(parent, null, '', source, target)
+                            createEdgeWithOffset(graph, parent, source, target, edgeOffset)
                             handleCellGeometry(mainlogCell, true, 0, 50)
                             return
                         }
@@ -569,7 +575,7 @@ export default function App () {
                             const infoCell = createCell(graph, 'info', param3.replace(/'/g, ''), 'info')
                             const target = infoCell.children.find(child => child.value == 'step');
                             const source = stepCell.children.find(child => isChildAvailable(child, 'right'));
-                            graph.insertEdge(parent, null, '', source, target)
+                            createEdgeWithOffset(graph, parent, source, target, edgeOffset)
                             let childIdx = 0;
                             handleCellGeometry(infoCell, true, 0, 50)
                             if(param1 && param1 !== "\"undefined\"" && param1 !== "\"null\"") {
@@ -579,7 +585,7 @@ export default function App () {
                                     childIdx = idx
                                     return child.value == 'channel'
                                 })
-                                graph.insertEdge(parent, null, '', source, target)
+                                createEdgeWithOffset(graph, parent, source, target, edgeOffset)
                                 const Y = (infoCell.geometry.y - 20) + (childIdx * portGap)
                                 handleCellGeometry(channelCell, false, Y, 200, true)
                             }
@@ -590,7 +596,7 @@ export default function App () {
                                     childIdx = idx
                                     return child.value == 'receiver'
                                 })
-                                graph.insertEdge(parent, null, '', source, target)
+                                createEdgeWithOffset(graph, parent, source, target, edgeOffset)
                                 const Y = (infoCell.geometry.y) + (childIdx * portGap)
                                 handleCellGeometry(recieverCell, false, Y, 200, true)
                             }
@@ -621,8 +627,9 @@ export default function App () {
                                     const source2 = stepCell.children.find(child => isChildAvailable(child, 'right'))
                                     const target1 = execCell.children[0]
                                     const target2 = execCell.children[1]
-                                    graph.insertEdge(parent, null, '', source1, target1)
-                                    graph.insertEdge(parent, null, '', source2, target2)
+                                    createEdgeWithOffset(graph, parent, source1, target1, edgeOffset)
+                                    edgeOffset += 5
+                                    createEdgeWithOffset(graph, parent, source2, target2, edgeOffset)
                                     let Y = ((devices[deviceIdx].geometry.y - 100) - execCell.geometry.height + (childIdx * portGap)) + (childIdx * portGap)
                                     const height = Y + execCell.geometry.height;
                                     if(prevDeviceIdx !== -1 && prevDeviceIdx !== deviceIdx) {
@@ -656,6 +663,7 @@ export default function App () {
                     let side = null;
                     let source = null;
                     let devices = null; 
+                    let edgeOffset = 0;
                     for(const code of scriptTree[key]) {
                         const match = code.match((/(\w+\.\w+)\s([!=<>]+)\s\d+/g)) //Ищет в коде логическую последовательность двух операндов и операции
                         if(match) {
@@ -675,6 +683,7 @@ export default function App () {
                     handleBlockGeometry(transitionCell, false, blockOffsetY)
                     prevStep = transitionCell
                     scriptTree[key].forEach(code => {
+                        
                         const operations = code.match(/(&&|\|\|)/g); //Ищет в коде главную логическую операцию
                         const parts = []
                         let deviceCell = null;
@@ -683,7 +692,8 @@ export default function App () {
                         if(code.indexOf('else') !== -1) side = 'false'
                         // Создание ячеек для устройств
                         if(devices && code.indexOf('if') !== -1) {
-                            devices.forEach(device => {
+                            devices.forEach((device, i) => {
+                                i % 5 !== 0 ? edgeOffset += 5 : edgeOffset = 0
                                 //Разбитие найденой логической пары на [операнд1, операция, операнд2]
                                 const [op1, op, op2] = device.split(' ');
                                 const [beforeDot,afterDot] = op1.split('.');
@@ -702,7 +712,7 @@ export default function App () {
                                 // Создание названия ячейки условия
                                 const str = target.value + op + op2
                                 parts.push(str)
-                                graph.insertEdge(parent, null, '', source, target)
+                                createEdgeWithOffset(graph, parent, source, target, edgeOffset)
                             })
                             // Установка названия ячейки условия
                            if(operations) {
@@ -727,7 +737,7 @@ export default function App () {
                                 const exitCell = createCell(graph, 'exit')
                                 const source = transitionCell.children.find(child => child.value === side)
                                 const target =  exitCell.children[0]
-                                graph.insertEdge(parent, null, '', source, target)
+                                createEdgeWithOffset(graph, parent, source, target, edgeOffset)
                                 handleCellGeometry(exitCell, true, -60)
                                 return
                             }
