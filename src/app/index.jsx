@@ -76,7 +76,7 @@ export default function App () {
     let _init = true;
     const scriptTree = {};
     let currMethod = '';
-    Object.entries(TestScript).map(([name, fn]) => fn.toString().split('\n').forEach((line, idx) => {
+    Object.entries(TestScript).map(([_, fn]) => fn.toString().split('\n').forEach((line, idx) => {
         if(idx == 0) {
             const name = line.replace(/\W/g, '')
             currMethod = name
@@ -250,8 +250,6 @@ export default function App () {
         style.fillColor = '#FFFFFF';
         style.labelBackgroundColor = '#FFFFFF'
         style.edgeStyle = 'orthogonalEdgeStyle'
-        style.entryX = 0;
-        style.entryDx = 0;
 
         const connectionHandler = graph.getPlugin('ConnectionHandler');
 
@@ -308,14 +306,27 @@ export default function App () {
         const editorHadler = graph.getPlugin('CellEditorHandler')
         const handleDelete = (e) => {
             if(e.key === 'Backspace' && !editorHadler.editingCell) {
-                const cells = graph.getSelectionCells();
-                cells.forEach(cell =>  {
-                    if(!cell.connectable || cell.edge) {
-                        graph.model.remove(cell)
-                        graph.removeStateForCell(cell)
-                        graph.removeCells([cell])
-                    }
-                })
+                graph.getDataModel().beginUpdate()
+                try {
+                    const cells = graph.getSelectionCells();
+                    cells.forEach(cell =>  {
+                        if(!cell.connectable || cell.edge) {
+                            if(!cell.edge) {
+                                cell.children?.forEach(child => {
+                                    const edges = graph.getEdges(child);
+                                    if (edges.length) {
+                                       edges.forEach(edge => {
+                                        graph.getDataModel().remove(edge);
+                                       })
+                                    }
+                                });
+                            }
+                            graph.getDataModel().remove(cell);
+                        }
+                    })
+                } finally {
+                    graph.getDataModel().endUpdate();
+                }
                 handleGraphChange()
             }
         }
@@ -634,7 +645,7 @@ export default function App () {
                                     const height = Y + execCell.geometry.height;
                                     if(prevDeviceIdx !== -1 && prevDeviceIdx !== deviceIdx) {
                                         if(Ymod) Ymod = 0
-                                        Object.values(execHash).forEach(([top, bottom]) => {
+                                        Object.values(execHash).forEach(([_, bottom]) => {
                                             if(bottom - Y < 40 && bottom - Y > -40) {
                                                 Ymod = 40
                                             }
@@ -683,7 +694,6 @@ export default function App () {
                     handleBlockGeometry(transitionCell, false, blockOffsetY)
                     prevStep = transitionCell
                     scriptTree[key].forEach(code => {
-                        
                         const operations = code.match(/(&&|\|\|)/g); //Ищет в коде главную логическую операцию
                         const parts = []
                         let deviceCell = null;
